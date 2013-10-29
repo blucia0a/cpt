@@ -1,0 +1,114 @@
+#5  0x000000000040206a in consumer (q=0x226c140) at pbzip2.cpp:1028
+1028				pret = pthread_cond_timedwait(fifo->notEmpty, fifo->mut, &waitTimer);
+(gdb) infoQuit
+(gdb) p /x LWT_table[fifo->mut]
+Argument to arithmetic operation not a number or boolean.
+(gdb) p /x LWT_table[(unsigned long)fifo->mut]
+$1 = 0x405549
+(gdb) info line *405549
+No line number information available for address 0x6302d
+(gdb) info line *0x405549
+Line 1133 of "pbzip2.cpp" starts at address 0x405531 <_Z11queueDeleteP5queue+81> and ends at 0x405571 <_Z11queueDeleteP5queue+145>.
+
+
+
+
+(gdb) info line *0x4dfefc
+Line 102 of "fdqueue.c" starts at address 0x4dfef3 <ap_queue_info_set_idle+147> and ends at 0x4dff01 <ap_queue_info_set_idle+161>.
+(gdb) where
+#0  0x00007fe424eac015 in raise () from /lib/libc.so.6
+#1  0x00007fe424eadb83 in abort () from /lib/libc.so.6
+#2  0x0000000000463b49 in ap_log_assert (szExp=0x506818 "!((queue)->nelts == (queue)->bounds)", szFile=0x5067f8 "fdqueue.c", nLine=307)
+    at log.c:868
+#3  0x00000000004e06e2 in ap_queue_push (queue=0x2380008, sd=0x23ff2e8, p=0x23ff268) at fdqueue.c:307
+#4  0x0000000002380010 in ?? ()
+#5  0x00000000023ff268 in ?? ()
+#6  0x0000000000000000 in ?? ()
+(gdb) p /x LWT_table[(unsigned long)(&worker_queue_info->idlers)]
+$20 = 0x20000004dfefc
+(gdb) where
+#0  0x00007fe424eac015 in raise () from /lib/libc.so.6
+#1  0x00007fe424eadb83 in abort () from /lib/libc.so.6
+#2  0x0000000000463b49 in ap_log_assert (szExp=0x506818 "!((queue)->nelts == (queue)->bounds)", szFile=0x5067f8 "fdqueue.c", nLine=307)
+    at log.c:868
+#3  0x00000000004e06e2 in ap_queue_push (queue=0x2380008, sd=0x23ff2e8, p=0x23ff268) at fdqueue.c:307
+#4  0x0000000002380010 in ?? ()
+#5  0x00000000023ff268 in ?? ()
+#6  0x0000000000000000 in ?? ()
+(gdb) inspect *worker_queue_info
+$21 = {idlers = 4294967294, idlers_mutex = 0x2380150, wait_for_idler = 0x23801a0, terminated = 0, max_idlers = 3, 
+  recycled_pools = 0x23d1178}
+(gdb) idlers is overflowed!Quit
+(gdb) p /x LWT_table[(unsigned long)(&worker_queue_info->idlers)]
+$22 = 0x20000004dfefc
+(gdb) info line *0x4dfefc
+Line 102 of "fdqueue.c" starts at address 0x4dfef3 <ap_queue_info_set_idle+147> and ends at 0x4dff01 <ap_queue_info_set_idle+161>.
+(gdb) p /x myTid
+$23 = 0x5
+(gdb) thread 2
+Thread ID 2 not known.
+(gdb) thread 1
+[Switching to thread 1 (Thread 0x7fe4262fe730 (LWP 16174))]#0  0x00007fe4251f9e7b in sigwait () from /lib/libpthread.so.0
+(gdb) p /x myTid
+$24 = 0x0
+(gdb) thread 3
+[Switching to thread 3 (Thread 0x416f0950 (LWP 16179))]#0  0x00007fe424f216e1 in nanosleep () from /lib/libc.so.6
+(gdb) p /x myTid
+$25 = 0x2
+(gdb) where
+#0  0x00007fe424f216e1 in nanosleep () from /lib/libc.so.6
+#1  0x00007fe424f58c74 in usleep () from /lib/libc.so.6
+#2  0x00000000004dff7e in ap_queue_info_set_idle (queue_info=0x2380128, pool_to_recycle=Unhandled dwarf expression opcode 0xf3
+) at fdqueue.c:119
+#3  0x00000000004db883 in worker_thread (thd=0x2380230, dummy=Unhandled dwarf expression opcode 0xf3
+) at worker.c:844
+#4  0x00007fe425a909e7 in dummy_worker (opaque=0x2380230) at threadproc/unix/thread.c:142
+#5  0x00007fe42584aeb2 in threadStartFunc (arg=0x23ba2f0) at RWCalls.cpp:69
+#6  0x00007fe4251f23ea in start_thread () from /lib/libpthread.so.0
+#7  0x00007fe424f5fcbd in clone () from /lib/libc.so.6
+#8  0x0000000000000000 in ?? ()
+(gdb) up
+#1  0x00007fe424f58c74 in usleep () from /lib/libc.so.6
+(gdb) up
+#2  0x00000000004dff7e in ap_queue_info_set_idle (queue_info=0x2380128, pool_to_recycle=Unhandled dwarf expression opcode 0xf3
+) at fdqueue.c:119
+119	    usleep(1000);
+(gdb) up
+#3  0x00000000004db883 in worker_thread (thd=0x2380230, dummy=Unhandled dwarf expression opcode 0xf3
+) at worker.c:844
+844	            rv = ap_queue_info_set_idle(worker_queue_info, last_ptrans);
+(gdb) down
+#2  0x00000000004dff7e in ap_queue_info_set_idle (queue_info=0x2380128, pool_to_recycle=Unhandled dwarf expression opcode 0xf3
+) at fdqueue.c:119
+119	    usleep(1000);
+(gdb) 
+
+
+
+
+-----------------------------------------
+#3  0x00000000005eb977 in mysql_insert(...) at sql_insert.cc:317
+317	      }else{ assert(mysql_bin_log.log_type != LOG_CLOSED && "INSERT NOT LOGGED."); }
+(gdb) inspect mysql_bin_log.log_type
+$2 = LOG_CLOSED
+(gdb) p /x LWT_table[(unsigned long)(&mysql_bin_log.log_type)]
+$3 = 0xb000000600265
+(gdb) info line *0x600265
+Line 1487 of "log.cc" starts at address 0x600246 <_ZN9MYSQL_LOG5closeEb+262>
+   and ends at 0x60026a <_ZN9MYSQL_LOG5closeEb+298>.
+(gdb) p /x myTid
+$4 = 0xc
+
+
+
+#3  0x00000000005eb977 in mysql_insert(...) at sql_insert.cc:317
+317	      }else{ assert(mysql_bin_log.log_type != LOG_CLOSED && "INSERT NOT LOGGED."); }
+(gdb) inspect mysql_bin_log.log_type
+$2 = LOG_CLOSED
+(gdb) p /x LWT_table[(unsigned long)(&(mysql_bin_log.log_type))]
+$3 = 0x96039c3600265
+(gdb) info line *0x6039c3
+Line 864 of "log.cc" starts at address 0x6039c3 <_ZN9MYSQL_LOG8new_fileEb+227> and ends at 0x6039db <_ZN9MYSQL_LOG8new_fileEb+251>.
+(gdb) info line *0x600265
+Line 1487 of "log.cc" starts at address 0x600246 <_ZN9MYSQL_LOG5closeEb+262> and ends at 0x60026a <_ZN9MYSQL_LOG5closeEb+298>.
+

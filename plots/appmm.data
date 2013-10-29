@@ -1,0 +1,17 @@
+App               CGraph    CCI-Prev
+Apache            1.02      1.01  
+MySQL             1.04      1.00
+memcached         1.03      0.99
+LevelDB           1.07      1.03
+GMean             1.04      1.01
+""                1.0       1.0
+blackscholes      0.98      0.99
+dedup             1.06      1.02
+canneal           1.02      0.99
+x264              1.11      1.02
+vips              1.05      1.00
+ferret            1.06      1.01
+fluidanimate      1.01      1.07
+swaptions         0.98      1.03
+streamcluster     1.09      1.01
+GMean             1.04      1.02 
