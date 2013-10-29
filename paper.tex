@@ -357,19 +357,18 @@ escape analysis may eliminate more instrumentation sites.  Investigating better
 instrumentation strategies is orthogonal, but an interesting subject for future
 work.
 
-\subsection{Formalism and Correctness}
+\subsection{\lwt Formalism and Correctness}
 \label{sec:lwssoundness}
 To discuss the correctness of our \lwt-based last writer slice support, we
 first develop a formal description of last writer slices.  We consider an
-N-threaded program $P = \{P_1, P_2, \ldots P_N\}$, where $P_i = \{p^{i}_{1},
-p^{i}_{2}, \ldots, p^{i}_{k_{i}}\}$ is the sequence of $k_{i}$ dynamic
-instructions executed by thread $i$.  We assume multi-threaded executions are
-sequentially consistent (SC).  Without loss of generality, we assume all
+N-threaded program $P = \{P_1, P_2, \ldots P_N\}$, where $P_i = (p^{i}_{1},
+p^{i}_{2}, \ldots, p^{i}_{k_{i}})$ is the sequence of $k_{i}$ dynamic
+instructions executed by thread $i$.  Without loss of generality, we assume all
 instructions are memory reads and writes, with the form $Op(m)$ where $Op$ is
-$Read$ or $Write$. We also assume $m$ is a uniquely addressed memory location.
-Under SC, a point in an execution of $P$ after $e$ instructions have
+$Read$ or $Write$ and $m$ is a uniquely addressed memory location.
+A point in an execution of $P$ after $e$ instructions have
 executed is defined by $Q = (q_{0}, \ldots, q_{e})$ where each $q \in Q$ is a
-$p^{i}_{j}$ from one of the $k_i$ instructions of thread $i$. We introduce
+$p^{i}_{j}$ from one of the $k_i$ instructions of thread $i$.  We introduce
 $LWS[m]$ -- the Last Writer Slice for memory location $m$.   At any point $Q$,
 $LWS[m]$ holds $(t,p^{t}_{\ell w})$, where $p^{t}_{\ell w} = max_{\ell}( 
 q_{\ell} = Write(m) \in Q)$ and $t$ is the thread that
@@ -396,21 +395,27 @@ there are no data races in the execution; and (2) each memory location
 referenced by a write refers to a unique region of memory that does not overlap
 with another referenced region.  
 
-\paragraph{Sequential Consistency and Data-races}
+\paragraph{Performance, Atomicity, and Sequential Consistency}
 
-We assume data-race freedom and a memory model that provides SC under data-race
-freedom (implying an SC execution).  We must make these assumptions because,
-for performance reasons, we do not enforce the atomicity of \lwt updates and
-their corresponding program accesses (a design choice made in prior
-work~\cite{fasttrack,recon}).  This atomicity is also required for correctness.    
+We do not enforce the atomicity of \lwt updates and their corresponding program
+accesses.  This design choice, made in prior work~\cite{fasttrack,recon},
+allows us to omit the synchronization operations that enforce the atomicity of
+these operations.  The benefit of omitting these synchronization operations is
+that overhead of our analysis is reduced. The downside is that our analysis is
+vulnerable to violations of the atomicity of \lwt updates and their
+corresponding accesses. Importantly, however, these violations can only occur
+in programs with data-races and all programs with data-races do not necessarily
+corrupt the \lwt. 
 
-We use the relation $p \prec q$ to denote that $p$ happens before $q$.  Under
-data-race freedom, any write by thread $t$ to $m$, $p^{t}_{j} = Write(m)$,  is
-ordered by program synchronization with $p^{t'}_{j'} = Op(m)$, a later access to
-$m$ by any other thread $t'$ -- {\em i.e.}, $p^{t}_{j} \prec p^{t'}_{j'}$.  Our
-compiler inserts an \lwt update $I(p^{t}_{j})$ into $P'$ before its write
-operation, $p^{t}_{j}$, so $I(p^{t}_{j}) \prec p^{t}_{j}$.  Happens-before is
-transitive, so $I(p^{t}_{j}) \prec p^{t}_{j} \prec I(p^{t'}_{j'}) \prec
+We use our \lwt formalism from above to characterize how data-races can
+interfere with \lwt updates.  The relation $p \prec q$ denotes that $p$ happens
+before $q$.  In the absence of data-races, any write by thread $t$ to $m$,
+$p^{t}_{j} = Write(m)$, is ordered by program synchronization with $p^{t'}_{j'}
+= Op(m)$, a later access to $m$ by any other thread $t'$ -- {\em i.e.},
+$p^{t}_{j} \prec p^{t'}_{j'}$.  Our compiler inserts an \lwt update
+$I(p^{t}_{j})$ into $P'$ before its write operation, $p^{t}_{j}$, so
+$I(p^{t}_{j}) \prec p^{t}_{j}$.  Happens-before is transitive, so without
+data-races, $I(p^{t}_{j}) \prec p^{t}_{j} \prec I(p^{t'}_{j'}) \prec
 p^{t'}_{j'}$, meaning $I(p^{t}_{j})$ happens before all accesses that
 $p^{t}_{j}$ happens before {\em and before their respective \lwt updates},
 $I(p^{t'}_{j'})$.  Symmetrically, for any access $p^{t''}_{j''}$ in another
@@ -475,7 +480,7 @@ used dependence slices that include intra-thread
 dependences~\cite{whylineicse,conseq,tipslicingsurvey}.  The overhead of
 slicing dependence chains and tracking temporal sequences is often high,
 relegating such techniques to working on traces~\cite{whylinechi} or debugging
-executions.  
+executions run ``in the lab''.  
 
 The \lwt dynamically records information about write operations -- what thread
 and code point last wrote each memory location.   These last writer slices do
@@ -487,10 +492,10 @@ assertion's condition helps explain why the failure occurred.  Last writer
 slices therefore answer an important class of ``why?'' questions related to
 concurrency errors.     
 
-Computing last writer slices is fast enough to deploy and use
-continuously (see Section~\ref{sec:eval}) and the \lwt can be saved with a core
-dump.  Thus last writer slices can (and should) be made part of the standard
-debugging information provided when a program fails.  
+Computing last writer slices is fast enough to deploy and use continuously (see
+Section~\ref{sec:eval}) and the \lwt can be saved with a core dump.  Thus, last
+writer slices can be made part of the standard debugging information provided
+when a program fails.  
 
 \subsubsection{Case Studies}
 
