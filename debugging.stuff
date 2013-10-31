@@ -112,3 +112,48 @@ Line 864 of "log.cc" starts at address 0x6039c3 <_ZN9MYSQL_LOG8new_fileEb+227> a
 (gdb) info line *0x600265
 Line 1487 of "log.cc" starts at address 0x600246 <_ZN9MYSQL_LOG5closeEb+262> and ends at 0x60026a <_ZN9MYSQL_LOG5closeEb+298>.
 
+
+--------------------------------------------------------------------------
+
+Process:
+
+With a failing run:
+1)run, fail, collect core including LWT
+
+2)load core in gdb.  See failure at 
+  "3141	  hts_mutexlock(&opt->state.lock);"
+
+3)inspect LWT_table[ &opt->state.lock ];  it reports:
+  Thread:    Code Point:
+
+With a non-failing run:
+1)run in gdb past point of failure, then take breakpoint
+
+2)at breakpoint, inspect the value of LWT_table[ &opt->state.lock ];  reports:
+Thread: 1  
+Code Point: 
+Line 170 of "htsthread.c" starts at address 0x7f82702fa16b <hts_mutexinit+58>
+   and ends at 0x7f82702fa16e <hts_mutexinit+61>.
+
+Reason that this init function should have run in the failing run, too.
+
+Benefit of LWT: Says which thread should have initialized the var and where in
+the source the initialization occurs.  We know "both ends" of the null deref --
+who should have made it not null and who does the deref.
+
+
+
+LWT entry for successful run points here:
+
+HTSEXT_API void hts_mutexinit(htsmutex* mutex) {
+  htsmutex_s* smutex = malloct(sizeof(htsmutex_s));
+#ifdef _WIN32
+  smutex->handle = CreateMutex(NULL, FALSE, NULL);
+#else
+  pthread_mutex_init(&smutex->handle, 0);
+#endif
+  *mutex = smutex; <----------------------------------
+}
+
+
+
