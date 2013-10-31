@@ -74,11 +74,11 @@ When programmers reason incorrectly, they permit some interleavings that should
 be forbidden.  When such interleavings occur, program executions may fail,
 experience performance degradation, or suffer other undesirable behavior.
 Preventing such undesirable behavior is a fundamental challenge faced by
-software engineers.  One important way to understand program behavior is to
-monitor which read and write operations {\em depend} on one another.  Memory
+software engineers.  An important way to understand program behavior is to
+monitor which read and write operations depend on one another.  Memory
 operations are dependent if their order determines the values they read or
-write.  Dependences are especially useful for understanding how threads
-interact.   
+write.  Inter-thread dependence analysis is especially useful for understanding
+how threads interact.  
 
 
 %\cite{defuse,conseq,recon,bugaboo,raceslicing,fasttrack,falcon}
@@ -108,44 +108,51 @@ order of dependent events to help reproduce failures.
 %trasactional memory (STM) systems~\cite{stm} monitor dependences to identify
 %conflicts between concurrently executing atomic code regions.  
 
-We note that monitoring dependences is not only a fundamental part of the value
-of such systems, but also a fundamental part of the {\em cost}.  Tracking
-dependences requires executing additional monitoring code while the program
-runs and many of the above systems have reported overheads too high for use in
-production (10-100x
+Many of the systems mentioned above are especially valuable when they run in
+production systems on deployed code.  Unfortunately, tracking dependences is
+not only a fundamental part of the value of these systems, but also a
+fundamental part of their {\em cost}.  Tracking dependences requires executing
+additional monitoring code while the program runs and many of the above systems
+have reported overheads too high for use in production (10-100x
 slowdown)~\cite{raceslicing,dmtracker,velodrome,recon,defuse,oshajava,chimera,coredet,stm}.
-Unfortunately, many of these systems are most effective when they run in
-production.
 
-We argue in this work that dependence-tracking analysis should -- and can --
-have low enough overhead for use in deployed systems.  The key to reducing the
-overhead of dependence tracking is to carefully select and monitor only a
-{\em subset} of dependences.  We start from two simple observations: (1) Reads are
-frequent so we must minimize tracking overheads on reads, and (2) When
-addressing concurrency, {\em inter-thread} dependences are most important.
-Based on these observations, we focus on dependences that reflect {\em
-communication} between threads.  Communication occurs when a thread reads or
-overwrites a memory location that was most recently written by a different
+The key to reducing the overhead of dependence tracking is to carefully select
+and monitor only a {\em subset} of dependences.  We start from two simple
+observations: (1) Reads are frequent so we must minimize tracking overheads on
+reads, and (2) In concurrency analyses, {\em inter-thread} dependences are most
+important.  Based on these observations, we focus on dependences that reflect
+{\em communication} between threads.  Communication occurs when a thread reads
+or overwrites a memory location that was most recently written by a different
 thread; {\em i.e.}, inter-thread read-after-write (RAW) and write-after-write
 (WAW).  Tracking only communication dependences preserves enough information to
-implement useful applications, but has low enough overhead for always-on use in
-production.  Framed by this idea, there are two parts to our work.
+implement useful applications and analyses, but has low enough overhead for
+always-on use in production systems.
+
+Framed by these observations, we demonstrate in this work that an important,
+versatile form of inter-thread dependence-tracking analysis has inherent
+overheads that are low enough for use in deployed systems.  There are two parts
+to our work:
 
 First, we describe {\em last writer slices}
 (Section~\ref{sec:lastwriterslices}).  Last writer slices record the thread and
-program point that last wrote each memory location.  Last writer slices are
+program point that last wrote each memory location.     Last writer slices are
 useful because they expose the {\em provenance} of a memory location's contents
 during debugging (Section~\ref{sec:debugging}).  When a failure occurs, last
 writer slices are saved with a core dump.  Last writer slices are also
-available during an execution in the debugger.  Tracking last writer slices has
-low overhead because it only imposes overhead on write operations:  reads are
-overhead-free.  In Section~\ref{sec:eval} we experimentally show
-that collecting last writer slices has low overhead.
+available during an execution in the debugger.  Note that while prior work
+({\em e.g.}, ~\cite{recon,fasttrack,conmem,conseq,cci}) has relied on {\em ad
+hoc} last-writer analyses, in this work, we isolate the essential last-writer
+information in the form of last writer slices and provide an implementation
+with overheads appropriate for production systems.  Tracking last writer slices
+has low overhead because it imposes overhead on only write operations:  reads
+are overhead-free.  In Section~\ref{sec:eval} we experimentally show that
+collecting last writer slices indeed has overheads suitable for production
+systems for a variety of applications.
 
 Second, on top of last writer slices we build {\em Communication Traps} or {\em
 \ctraps}  (Section~\ref{sec:ctraps}).  \ctraps monitors inter-thread
 communication with overhead low enough for production use in many important
-cases.  When threads communicate, \ctraps delivers a {\em trap} that can be
+cases.  When threads communicate, \ctraps delivers a software {\em trap} that can be
 handled by a trap handler.  Trap handlers implement {\em \ctraps applications}
 through an extensible interface that can analyze or interpose on the execution
 (Section~\ref{sec:apps}).  By default, \ctraps has very low overhead.  \ctraps
@@ -592,11 +599,6 @@ Together, the \ctraps executable and the \ctraps handlers are deployed.
 %writer slices described in Section~\ref{sec:lastwriterslices}.  In addition,
 %our \ctraps system support also monitors all read and write operations that
 %might communicate and traps on all those that communicate.  
-In addition to our base \ctraps design, we also investigate \ctrapsmm, a
-variant of \ctraps that uses a flow-sensitive optimization to eliminate some
-sources of overhead at a cost in analysis precision. \ctrapsmm tracks all write
-operations that might communicate, but leaves some redundant read operations
-untracked (\ctraps, with {\bf N}o {\bf R}edundant {\bf R}eads).  
 
 \subsubsection{\ctraps System Support} 
 
@@ -635,49 +637,6 @@ void trap(AccessType type,
           ThdId lastThd, ProgPt lastPt);
 \end{verbatim}
 \caption{\label{fig:hookapi}The \ctraps trap handling interface.}
-\end{figure}
-
-
-
-\subsubsection{\ctrapsmm: Eliminating Redundant Instrumentation}
-\label{sec:dpo}
-
-The runtime support for \ctrapsmm is mostly the same as the runtime support for
-our base \ctraps design, but \ctrapsmm adds trap hooks on only a subset of
-reads.  \ctrapsmm's compiler support uses the program's control-flow structure
-to identify reads that are likely to be {\em redundant}, and eliminates trap
-hooks on those accesses.
-
-We use dominator-based analysis to eliminate instrumentation that is likely to
-be redundant.  Our analysis is function-local and works on code in SSA form.
-The compiler looks at each pair of reads that are instrumented with trap hooks.
-If a pair of instrumented reads both refer to a memory address stored in the
-same SSA variable and the instrumentation points are {\em control equivalent},
-then they are redundant.  Two reads, $A$ and $B$ are control equivalent if $A$
-dominates $B$ and $B$ post-dominates $A$ -- every path to $B$ passes through
-$A$, and every path passing through $A$ reaches $B$.  The latter read ("$B$")
-is not instrumented.  Using this technique to remove instrumentation sites
-preserves instrumentation along conditional control flow paths.  For example,
-if the second of a pair of reads is conditionally executed, and the first is
-not, then the pair are not control equivalent and both remain.  
-
-Figure~\ref{fig:insthooks} illustrates how a pair of control equivalent reads
-are instrumented by the compiler for \ctrapsmm.  Pictured on the left is the
-original program.  The shapes represent memory accesses with writes marked 'W'
-and reads marked 'R'.  Notice that the the pentagon and the diamond are control
-equivalent, despite the control flow structure separating them.  Pictured on
-the right is the program after instrumentation.  There are two important things
-to notice.  First, only the first of the control equivalent accesses are
-instrumented, eliminating instrumentation overhead.  Second, the conditionally
-executed accesses on either side of the branch are both instrumented.
-Preserving these accesses is important for enabling flow-sensitive applications
-using \ctrapsmm.  
-
-
-\begin{figure}[htb]
-\centering
-\includegraphics[width=.9\columnwidth]{figs/CTMMHooks.pdf}
-\caption{\label{fig:insthooks}Placement of trap hooks for \ctrapsmm.}
 \end{figure}
 
 \subsection{Formalism and Correctness}
@@ -721,26 +680,6 @@ updates, and accesses are all atomic.
 %effect on soundness or completeness because accesses to such locations are
 %guaranteed never to be communicating.
 
-\paragraph{\ctrapsmm} 
-
-\ctrapsmm has the same soundness guarantees as our base \ctraps design, but
-compromises on completeness.  The concession in completeness is the result of
-removing instrumentation on redundant reads. 
-
-\ctraps and \ctrapsmm rely on the same \lwt implementation, so all traps
-delivered in \ctrapsmm are also delivered in the base \ctraps design.  Hence,
-\ctrapsmm has the same soundness guarantee as basic \ctraps.  \ctrapsmm removes
-trap hooks on some reads that have trap hooks in our base \ctraps design.
-Without trap hooks, \ctrapsmm cannot deliver a trap before these reads, so it
-is incomplete.  We designed our redundancy analysis to sacrifice completeness,
-but preserve enough trap hooks to remain useful.  In \ctrapsmm, at least one of
-each pair of control-equivalent accesses is instrumented with a trap hook.
-Preserving at least one instrumenation site per control-equivalent pair
-guarantees some monitoring still occurs (although the set of trapping accesses
-may decrease substantially compared to our base \ctraps design).  Furthermore,
-as Section~\ref{sec:dpo} discusses, instrumentation sites on interesting
-control flow paths are preserved under our redundancy analysis.  For many
-debugging applications, preserving this control flow information is important.
 
 \subsection{\ctraps Applications}
 \label{sec:apps}
@@ -961,18 +900,18 @@ user-built applications to future work.
 
 \section{System Implementation and Applications}
 
-We implemented our last writer slicing design, our base \ctraps designs, and
-our \ctrapsmm design.  We built our compiler support as a plugin for GCC ({\tt
-gcc-4.7.0 20111112}).  We used GCC's points-to and escape analysis support to
-prune instrumentation to non-escaping memory locations.  We used GCC's
-dominator and post-dominator computations to implement our redundancy analysis.
-Our compiler instruments calls to {\tt free} and {\tt delete} as writes to the
-pointer being deallocated.  Our analysis handles all code compilable using this
-version of GCC except for a few cases: we do not handle accesses that compile
-to GCC {\tt BITFIELD\_REFERENCE} IR types because these are undocumented, we do
-not handle inlined assembly instructions, and we do not handle C++ exceptions.
-Note that these limitations of our research prototype are not fundamental and
-the limited cases are uncommon.   
+We implemented last writer slicing and \ctraps.  We built our compiler support
+as a plugin for GCC ({\tt gcc-4.7.0 20111112}).  We used GCC's points-to and
+escape analysis support to prune instrumentation to non-escaping memory
+locations.  We used GCC's dominator and post-dominator computations to
+implement our redundancy analysis.  Our compiler instruments calls to {\tt
+free} and {\tt delete} as writes to the pointer being deallocated.  Our
+analysis handles all code compilable using this version of GCC except for a few
+cases: we do not handle accesses that compile to GCC {\tt BITFIELD\_REFERENCE}
+IR types because these are undocumented, we do not handle inlined assembly
+instructions, and we do not handle C++ exceptions.  Note that these limitations
+of our research prototype are not fundamental and the limited cases are
+uncommon.   
 
 We built our runtime system from scratch in about 1000 lines of C and C++ code.
 We implemented the LWT as a fixed size 2GB array of 64-bit words.  Each entry
@@ -1077,11 +1016,7 @@ overheads that are low enough for use in deployed systems.
 Figure~\ref{fig:perfall} shows the slowdown suffered by our benchmarks due to last writer slicing
 and \ctraps running with ``no-op'' trap hooks ({\em i.e.}, no
 handlers), relative to the natively executing baseline.  These data reflect
-our main performance findings.  We defer considering \ctrapsmm to
-Section~\ref{sec:appperf} because no-op trap hooks have negligible overhead, so
-redundancy analysis provides negligible improvement.  In applications that
-perform analysis in read instrumentation, the benefit of redundancy analysis is
-non-negligible.  
+our main performance findings.    
 
 \paragraph{Last Writer Slices}
 The data show that last writer slicing has very low overheads with a geometric mean of less
@@ -1357,73 +1292,6 @@ important target than PARSEC for these types of analyses in production.
 \caption{\label{fig:perfapps}Performance overheads of CCI-Prev and Graph Collection implemented with \ctraps.}
 \end{figure}
 
-\subsubsection{Precision and Performance with \ctrapsmm}
-We also evaluated the tradeoff of precision for performance of \ctrapsmm by
-applying our redundancy analysis to these applications.  We compute the loss in
-precision for CCI-Prev as the symmetric difference of the sets of points
-reported by \ctraps and \ctrapsmm.  We compute the loss in precision for
-communication graph collection as the symmetric difference in the edge lists
-reported by \ctraps and \ctrapsmm.  Table~\ref{tab:precisionapps} shows our
-precision results.  
-
-\begin{table}
-\small
-\centering
-\begin{tabular}{c | r | r  }
-\multirow{2}{*}{\bf Application} & \multicolumn{2}{c}{\bf \% Symmetric Difference} \\
-& {\bf \em CCI-Prev} & {\bf \em Comm. Graph} \\ \hline
-Apache& 0.2\% & 0.6\% \\
-MySQL & 12.9\%  & 37.9\% \\
-memcached  & 6.2\% & 4.3\% \\
-LevelDB & 2.2\% & 9.9\% \\ \hline
-blackscholes & 6.7\% & 0.0\% \\
-dedup & 1.5\% & 3.5\% \\
-canneal & 37.0\%  & 3.9\% \\
-x264 & 0.0\% & 0.0\% \\
-vips & 47.2\% & 11.3\% \\
-ferret & 25.7\% & 11.2\%\\
-fluidanimate & 1.4\% & 1.6\%\\
-swaptions & 0.0\% & 0.5\%\\
-streamcluster & 2.2\% & 3.8\%\\
-\end{tabular}
-\caption{\label{tab:precisionapps}The difference in precision for \ctraps applications using our base \ctraps design versus \ctrapsmm}
-\end{table}
-
-
-The results show that in many cases \ctrapsmm's redundancy analysis preserves
-analysis information.  For CCI-Prev, {\tt swaptions} and {\tt x264} had
-identical outputs under \ctrapsmm and our base \ctraps design.  The difference for other
-benchmarks was often tolerable -- $0.2\%$ for Apache, $1.5$\% for {\tt dedup},
-$1.4\%$ for {\tt fluidanimate}, and 2.2\% for LevelDB.  Results were similar
-for communication graph collection.   The maximum difference in precision we saw (37.9\%)
-was less the maximum for CCI-Prev (47.2\%).  Several applications saw
-miniscule differences in their output ({\tt swaptions}, {\tt Apache}, {\tt
-fluidanimate}) or had identical outputs under both schemes ({\tt blackscholes},
-{\tt x264}). 
-
-
-We also quantified the performance improvement of \ctrapsmm.
-Figure~\ref{fig:perfcci} shows the speedup of each application with \ctrapsmm
-versus our base \ctraps design, as a percentage.  The speedups were low on average, with a
-geometric mean speedup of around 4\% for communication graph collection.  The
-key result here is that some applications that reaped larger performance
-benefits ({\em e.g.} $>$10\% for {\tt x264}) had no precision loss (cf.
-Table~\ref{tab:precisionapps}).  Others, like LevelDB had a modest performance
-boost (about 7\%) at a modest precision cost (about 2\% for CCI-Prev, 10\% for graph collection).  
-
-These data show that if performance is paramount and imprecision is tolerable,
-\ctrapsmm can provide marginally better overheads with little cost.  We note
-that for applications with very high overhead, a 5-10\% improvement in
-overheads is likely negligible.  However, for applications with very low
-overhead to begin with ({\em e.g.} servers), a 5-10\%
-performance improvement is more likely to matter.
-
-\begin{figure}
-\centering
-\includegraphics[width=.9\columnwidth]{plots/appmm.pdf}
-\caption{\label{fig:perfcci}Performance overheads of CCI-Prev and Graph Collection implemented with \ctrapsmm.}
-\end{figure}
-
 
 \subsection{Characterizing \ctraps}
 \label{sec:char}
@@ -1439,26 +1307,28 @@ pass that marked pruned functions statically so they could be counted
 separately from non-pruned functions at runtime.
 
 \begin{table}
-\renewcommand{\tabcolsep}{2pt}
+%\renewcommand{\tabcolsep}{2pt}
 \centering
 \small
-\begin{tabular}{l | r r | r r | r r}
-\multirow{3}{*}{\bf Application} & \multicolumn{6}{c}{\bf Pruned Instrumentation} \\
-               & \multicolumn{2}{c|}{\bf \em Static Local}          & \multicolumn{4}{c}{\bf \em  Redundant Reads}                 \\ 
-               & \multicolumn{2}{c|}{\bf \em Operations}          & \multicolumn{2}{c|}{ \em  Static} & \multicolumn{2}{c}{ \em  Dynamic}                \\ \hline
-Apache         &  21.4\%&(12K)                &  2.6\%& (1.4K)                        & 3.0\%   & (15.2M)                   \\
-MySQL          &  21.3\%&(53K)                &  6.8\%& (17K)                         & 0.1\%   & (230M)                    \\
-memcached      &  65.8\%&(7.5K)               & 1.4\% & (160)                        & $<$0.1\% & (10.2M)                   \\
-LevelDB        &  44.0\%&(4.5K)               & 5.8\% & (598)                         & 2.2\%   & (6.8M)                    \\ \hline
-blackscholes   &   7.5\%&(4)                  & 3.8\% & (2)                           & $<$0.1\%& (2)                       \\
-dedup          &   22.0\%&(171)               & 0.1\% & (1)                           &  0.1\%  & (899K)                    \\
-canneal        &   28.6\%&(226)               & 15.7\%& (124)                         &  15.2\% & (977M)                    \\
-x264           &   29.8\%&(5960)              & 14.9\%& (2987)                        &  23.3\% & (869M)                    \\
-vips           &   24.6\%&(9116)              & 5.2\% & (1919)                        &  16.0\% & (3.3B)                    \\
-ferret         &   20.9\%&(792)               & 1.1\% & (40)                          &   1.6\% & (923M)                    \\
-fluidanimate   &   19.6\%&(149)               & 0.4\% & (3)                           &   0.1\% & (138M)                    \\
-streamcluster  &   11.6\%&(47)                & 5.4\% & (22)                          & $<$0.1\%& (5.8M)                    \\
-swaptions      &   8.3\% &(19)                & 1.0\% & (2)                           & $<$0.1\%& (2)                       \\
+\begin{tabular}{l | r r }
+\multirow{3}{*}{\bf Application} & \multicolumn{2}{c}{\bf \em Pruned } \\
+               & \multicolumn{2}{c}{\bf \em Static Local}  \\ 
+               & \multicolumn{2}{c}{\bf \em Operations}    \\ \hline
+
+
+Apache         &  21.4\%&(12K)                    \\
+MySQL          &  21.3\%&(53K)                    \\
+memcached      &  65.8\%&(7.5K)                   \\
+LevelDB        &  44.0\%&(4.5K)                   \\ \hline
+blackscholes   &   7.5\%&(4)                      \\
+dedup          &   22.0\%&(171)                   \\
+canneal        &   28.6\%&(226)                   \\
+x264           &   29.8\%&(5960)                  \\
+vips           &   24.6\%&(9116)                  \\
+ferret         &   20.9\%&(792)                   \\
+fluidanimate   &   19.6\%&(149)                   \\
+streamcluster  &   11.6\%&(47)                    \\
+swaptions      &   8.3\% &(19)                    \\
 \end{tabular}
 \caption{\label{tab:char}Instrumentation pruned by static analysis.}
 \end{table}
