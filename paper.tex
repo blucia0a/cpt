@@ -77,8 +77,29 @@ Preventing such undesirable behavior is a fundamental challenge faced by
 software engineers.  An important way to understand program behavior is to
 monitor which read and write operations depend on one another.  Memory
 operations are dependent if their order determines the values they read or
-write.  Inter-thread dependence analysis is especially useful for understanding
-how threads interact.  
+write.  The value of dependence information is made especially clear by its
+prevalent use during manual program debugging and in support of program
+analysis tools.
+
+Debugging a concurrent program requires understanding how threads interact and
+dependence information furnishes that understanding.  Programmers debug
+programs more effectively when they can ask questions about the provenance of
+values during a program's execution~\cite{slicingsurvey,whylineicse}.
+Dependence information helps programmers with the difficult task of identifying
+control- and data-flows that influenced a particular data value at a particular
+point.  In concurrent programs, data provenance information is vital because
+influential control- and data-flows may be in any thread, making the task of
+understanding the origin of a value much more complex.
+
+Compounding this complexity, many concurrency bugs manifest as failures rarely.
+When a deployed system fails and a programmer receives a bug report,
+reproducing the reported failure to collect dependence information may be
+difficult or impossible.  It is essential to collect as much information as
+possible in deployed systems to reduce the need for time-consuming forensic bug
+reproduction.  Unfortunately, prior approaches to tracking dependences in
+concurrent code~\cite{raceslicing,tipslicingsurvey} impose high run time
+overheads.  These overheads are prohibitively high for use in production. 
+
 
 
 %\cite{defuse,conseq,recon,bugaboo,raceslicing,fasttrack,falcon}
@@ -89,8 +110,9 @@ how threads interact.
 %\cite{defuse}
 %\cite{avio,cci,defuse,recon,bugaboo,falcon,dmtracker,aviso,cfix,criticalitypredictors,schedpredictionmodel}
 
-Prior work has used dependence information to reduce the burden of making
-reliable, efficient concurrent software.  Bug
+Dependence information is also an important part of many program analysis
+tools.  Prior work has used dependence information to reduce the burden of
+making reliable, efficient concurrent software.  Bug
 detection~\cite{avio,fasttrack,raceslicing,dmtracker} and
 debugging~\cite{tipslicingsurvey,bugaboo,recon,cci,defuse,conseq,falcon} tools
 analyze inter-thread dependences to find buggy behavior and help programmers
@@ -108,13 +130,11 @@ order of dependent events to help reproduce failures.
 %trasactional memory (STM) systems~\cite{stm} monitor dependences to identify
 %conflicts between concurrently executing atomic code regions.  
 
-Many of the systems mentioned above are especially valuable when they run in
-production systems on deployed code.  Unfortunately, tracking dependences is
-not only a fundamental part of the value of these systems, but also a
-fundamental part of their {\em cost}.  Tracking dependences requires executing
-additional monitoring code while the program runs and many of the above systems
-have reported overheads too high for use in production (10-100x
+These systems would be especially valuable, if run in production systems on
+deployed code.  However, as with dependence tracking on its own, most of these
+systems have overheads too high for use in production (5-100x
 slowdown)~\cite{raceslicing,dmtracker,velodrome,recon,defuse,oshajava,chimera,coredet,stm}.
+
 
 The key to reducing the overhead of dependence tracking is to carefully select
 and monitor only a {\em subset} of dependences.  We start from two simple
@@ -128,7 +148,7 @@ thread; {\em i.e.}, inter-thread read-after-write (RAW) and write-after-write
 implement useful applications and analyses, but has low enough overhead for
 always-on use in production systems.
 
-Framed by these observations, we demonstrate in this work that an important,
+Framed by these observations, we demonstrate in this work that a 
 versatile form of inter-thread dependence-tracking analysis has inherent
 overheads that are low enough for use in deployed systems.  There are two parts
 to our work:
@@ -209,12 +229,82 @@ low enough for use in deployment (0--15\%).}
 
 \section{Background}
 
-Many systems that support programming and execution models, debugging tools,
-and other software engineering tools track dynamic memory dependences during a
-program's execution.  In this section we provide context for \ctraps by
-discussing some of these systems, focusing on those that address concurrency.
-We then briefly discuss debugging with data dependence information, in order to
-motivate the role of last writer slices at debugging time.
+In this section we discuss debugging with data dependence information, using an
+example, in order to motivate collecting last writer slices in deployed
+systems.  We then provide context for \ctraps by discussing some more
+sophisticated concurrency analyses that rely on the kind of dependence
+information we are focusing on in this work.
+
+%Many systems that support programming and execution models, debugging tools,
+%and other software engineering tools track dynamic memory dependences during a
+%program's execution.  
+
+\subsection{Debugging and Data Provenance}
+
+Data dependence information is directly useful during program debugging.  Prior
+work has proposed a wide variety of dynamic program slicing
+techniques~\cite{thinslicing,tipslicingsurvey}.  These techniques record a
+subset (slice) of dynamic program instructions selected using data and control
+dependence information.  Dynamic dependence slices expose the provenance of
+data in the execution.  Work on debugging~\cite{whylinechi,whylineicse} in the
+HCI and Software Engineering community shows that when programmers debug
+programs, they benefit from the ability to directly ask such provenance
+(``why'') questions of their debugger.  
+
+
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/BackgroundCoreDumpFail.pdf}
+\caption{\label{fig:coreDumpFail}{\bf Ordering violation bug in HTTrack.} Simply examining memory does not provide provenance information that helps understand this bug.}
+\end{figure}
+
+Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
+plays in debugging, using an example of a real bug from HTTrack, a web caching
+tool.  The figure depicts two threads manipulating a data structure that
+contains a mutex\_lock.  The program has an ordering violation bug: the program
+crashes when Thread 2 tries to acquire the lock before Thread 1 has initialized
+it.  Assuming the run time environment supports it, a core dump delivered to
+the programmer after such a failure reveals very little about how to fix the
+bug.  The lock is uninitizalized, so it may hold {\tt NULL} or it may hold
+random bits.  Both scenarios provide no insight into the root cause of the
+failure, which is that the code permits a use of the lock before its
+initialization.   Comparing the core dump from the failing run to the memory
+image from a correct execution -- a likely debugging strategy -- reveals only
+that in a correct execution, the lock contains valid mutex state.  This
+revalation is of limited use as it does not rule out arbitrary data corruption
+as the bug's root cause.
+
+The vital, missing piece to solving this bug is provenance information.
+Debugging this bug would be easier if the core dump included information about
+the thread and code point that last wrote each variable.  The programmer would
+see that no thread had initialized the lock in the failing execution, but that
+Thread 1 initialized the lock in non-failing executions.  This information
+rules out data corruption as a root cause and guides the programmer to add
+synchronization ensuring the correct ordering relationship.
+
+Another facet to debugging this bug is that it manifests as a failure
+infrequently and under only real-world conditions.  If the programmer runs an
+instrumented or tooled version of the program, the failure may not manifest in
+a reasonable amount of time and running it may require unavailable real-world
+inputs.  Thus, collecting provenance or other information offline is
+time-consuming or impossible.  A better strategy is to continuously collect
+that information in deployed systems and package it with core dumps sent to
+programmers with bug reports.  The last writer slicing design we propose in
+this work espouses this {\em in situ} data collection strategy and does so with
+overheads appropriate for production systems.
+ 
+
+
+%Dynamic dependence slices are especially useful for debugging if they are
+%available after a failure has occurred in a deployed system. However, slicing
+%in deployed systems is uncommon, because deployed systems demand low overheads
+%and slicing can have high overhead.  Our system provides provenance information
+%that is useful at debugging time by collecting {\em last writer slices} that
+%help understand inter-thread communication.  We track last writer slices with
+%overhead low enough for use in production code.  Deployable efficiency makes it
+%possible to collect and report last writer slices the same way today's systems
+%collect and report core dumps.
 
 \subsection{Tracking Dependences and Communication}
 \label{sec:background:comm}
@@ -277,28 +367,6 @@ precision to build useful analyses and runtime systems with overhead low enough
 for use in production.
 
 
-\subsection{Debugging with Data Dependence Information}
-
-Data dependence information is directly useful during program debugging.  A
-wide variety of dynamic program slicing
-techniques~\cite{thinslicing,tipslicingsurvey} have been proposed.  These
-techniques record a subset (slice) of dynamic program instructions selected
-using data and control dependence information.  Dynamic dependence slices
-expose the provenance of control- and data-flows in the execution.  Work on
-debugging~\cite{whylinechi,whylineicse} in the HCI and Software Engineering
-community shows that when programmers debug programs, they benefit from the
-ability to directly ask such provenance (``why'') questions of their debugger.  
-
-
-Dynamic dependence slices are especially useful for debugging if they are
-available after a failure has occurred in a deployed system. However, slicing
-in deployed systems is uncommon, because deployed systems demand low overheads
-and slicing can have high overhead.  Our system provides provenance information
-that is useful at debugging time by collecting {\em last writer slices} that
-help understand inter-thread communication.  We track last writer slices
-with overhead low enough for use in production code.  Deployable efficiency
-makes it possible to collect and report last writer slices the same way today's
-systems collect and report core dumps.
 
 \section{Last Writer Slices}
 \label{sec:lastwriterslices}
@@ -480,14 +548,13 @@ updates for larger granularity accesses, increasing overheads.
 
 \subsection{Debugging with Last Writer Slices}
 \label{sec:debugging}
-Prior work has demonstrated that it is useful during debugging to allow
-programmers to ask ``why?'' questions~\cite{whylineicse,whylinechi} about the
-provenance of program state.  To answer such questions, prior work has mostly
-used dependence slices that include intra-thread
-dependences~\cite{whylineicse,conseq,tipslicingsurvey}.  The overhead of
-slicing dependence chains and tracking temporal sequences is often high,
-relegating such techniques to working on traces~\cite{whylinechi} or debugging
-executions run ``in the lab''.  
+The WhyLine debugger~\cite{whylineicse} demonstrated that it is useful to
+enable programmers to make data provenance queries during debugging.  To answer
+such questions, prior work has mostly used dependence slices that include
+intra-thread dependences~\cite{whylineicse,conseq,tipslicingsurvey}.  The
+overhead of slicing dependence chains and tracking temporal sequences is often
+high, relegating such techniques to working on traces~\cite{whylinechi} or
+debugging executions run ``in the lab''.  
 
 The \lwt dynamically records information about write operations -- what thread
 and code point last wrote each memory location.   These last writer slices do
@@ -557,6 +624,7 @@ unlogged) without the information in the \lwt, understanding {\em why} it is mar
 difficult.  This example illustrates how the \lwt fills in the crucial inter-thread
 dependence that helps understand why the program failed.
 
+\paragraph{Case Study: HTTrack}
 
 
 \section{Communication Traps}
