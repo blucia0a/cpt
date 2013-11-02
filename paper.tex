@@ -241,16 +241,11 @@ information we are focusing on in this work.
 
 \subsection{Debugging and Data Provenance}
 
-Data dependence information is directly useful during program debugging.  Prior
-work has proposed a wide variety of dynamic program slicing
-techniques~\cite{thinslicing,tipslicingsurvey}.  These techniques record a
-subset (slice) of dynamic program instructions selected using data and control
-dependence information.  Dynamic dependence slices expose the provenance of
-data in the execution.  Work on debugging~\cite{whylinechi,whylineicse} in the
-HCI and Software Engineering community shows that when programmers debug
-programs, they benefit from the ability to directly ask such provenance
-(``why'') questions of their debugger.  
-
+Data provenance information is directly useful during program debugging.
+Work on debugging~\cite{whylinechi,whylineicse} in the HCI and Software
+Engineering community shows that when programmers debug programs, they benefit
+from the ability to directly ask such provenance (``why'') questions of their
+debugger.  
 
 
 \begin{figure}[h]
@@ -262,39 +257,37 @@ programs, they benefit from the ability to directly ask such provenance
 Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
 plays in debugging, using an example of a real bug from HTTrack, a web caching
 tool.  The figure depicts two threads manipulating a data structure that
-contains a mutex\_lock.  The program has an ordering violation bug: the program
-crashes when Thread 2 tries to acquire the lock before Thread 1 has initialized
-it.  Assuming the run time environment supports it, a core dump delivered to
-the programmer after such a failure reveals very little about how to fix the
-bug.  The lock is uninitizalized, so it may hold {\tt NULL} or it may hold
-random bits.  Both scenarios provide no insight into the root cause of the
-failure, which is that the code permits a use of the lock before its
-initialization.   Comparing the core dump from the failing run to the memory
-image from a correct execution -- a likely debugging strategy -- reveals only
-that in a correct execution, the lock contains valid mutex state.  This
-revalation is of limited use as it does not rule out arbitrary data corruption
-as the bug's root cause.
+contains a mutex\_lock.  The program has an ordering violation bug: the
+program crashes when Thread 2 tries to acquire the lock before Thread 1 has
+initialized it.  Assuming the run time environment supports it, a core dump
+delivered to the programmer after such a failure reveals very little about how
+to fix the bug.  The lock is uninitizalized, so the core dump may show that it
+holds {\tt NULL} or it may hold random bits.  Both scenarios provide no
+insight into the root cause of the failure, which is that the code permits a
+use of the lock before its initialization.   Comparing the core dump from the
+failing run to the memory image from a correct execution -- a helpful debugging
+strategy -- reveals only that in a correct execution, the lock contains valid
+mutex state.  This revalation is of limited use as it does not rule out
+arbitrary data corruption as the bug's root cause.
 
 The vital, missing piece to solving this bug is provenance information.
-Debugging this bug would be easier if the core dump included information about
-the thread and code point that last wrote each variable.  The programmer would
-see that no thread had initialized the lock in the failing execution, but that
-Thread 1 initialized the lock in non-failing executions.  This information
-rules out data corruption as a root cause and guides the programmer to add
-synchronization ensuring the correct ordering relationship.
+Debugging would be easier if the core dump included information about the
+thread and code point that last wrote the lock.  The programmer would see that
+no thread had initialized the lock in the failing execution, but that Thread 1
+initialized the lock in non-failing executions.  This information guides the
+programmer to fix the bug by adding synchronization that ensures the correct
+operation ordering.
 
-Another facet to debugging this bug is that it manifests as a failure
-infrequently and under only real-world conditions.  If the programmer runs an
-instrumented or tooled version of the program, the failure may not manifest in
-a reasonable amount of time and running it may require unavailable real-world
-inputs.  Thus, collecting provenance or other information offline is
-time-consuming or impossible.  A better strategy is to continuously collect
-that information in deployed systems and package it with core dumps sent to
-programmers with bug reports.  The last writer slicing design we propose in
-this work espouses this {\em in situ} data collection strategy and does so with
-overheads appropriate for production systems.
- 
-
+Another challenge in debugging this bug is that it manifests as a failure
+infrequently and under only real-world conditions.  If the programmer runs the
+program in a debugger, the failure may not manifest in a reasonable amount of
+time and running it may require unavailable real-world inputs.  Thus,
+collecting provenance or other information offline is time-consuming or
+impossible.  A better strategy is to continuously collect that information in
+deployed systems and package it with core dumps sent to programmers with bug
+reports.  In this work, we propose a last writer slicing design that espouses
+this {\em in situ} data collection strategy and does so with overheads
+appropriate for production systems.
 
 %Dynamic dependence slices are especially useful for debugging if they are
 %available after a failure has occurred in a deployed system. However, slicing
@@ -310,18 +303,18 @@ overheads appropriate for production systems.
 \label{sec:background:comm}
 %\ctraps tracks dependences that correspond to {\em inter-thread communication}.
 
-A good first example of a system that monitors inter-thread dependences is
-software transactional memory (STM)~\cite{stm}.  In STMs, dependences
-correspond to interference between accesses in different threads that must be
-detected to rollback conflicting transactions.  Deterministic concurrent
-runtime systems~\cite{coredet,grace} are similar -- they monitor
-inter-thread dependences, to determine when to apply deterministic ordering
-constraints on threads' accesses.  STMs and deterministic systems must track
-all dependences and they must track them precisely, to provide strong
-guarantees as programming and execution models.  Unfortunately, precision can
-have a high runtime overhead -- {\em e.g.}, CoreDet incurs a mean overhead of
-around 5x~\cite{coredet}.  This overhead is too high for most production
-systems.  
+Monitoring inter-thread dependences is the foundation of many useful
+concurrency analyses.  For example, in a software transactional memory (STM)
+system~\cite{stm} dependences correspond to interference between accesses in
+different threads that must be detected to rollback conflicting transactions.
+Deterministic concurrent runtime systems~\cite{coredet,grace} are similar --
+they monitor inter-thread dependences, to determine when to apply
+deterministic ordering constraints on threads' accesses.  STMs and
+deterministic systems must track all dependences and they must track them
+precisely, to provide strong guarantees as programming and execution models.
+Unfortunately, precision has a high runtime overhead -- {\em e.g.},
+CoreDet incurs a mean overhead of around 5x~\cite{coredet}.  This overhead is
+too high for use in production.  
 
 %The overhead comes from the need to precisely track read-after-write (RAW),
 %write-after-read (WAR), and write-after-write (WAW) dependences, taking action
@@ -360,47 +353,33 @@ profilers, and anomaly detectors benefit from seeing diverse, real-world
 behavior.  Dynamic failure avoidance techniques must work in deployed systems
 to be effective.  Deployment environments demand low overheads.  
 
-In this work, we select a subset of inter-thread dependences in a systematic
-way, rather than choosing an {\em ad hoc} subset.  \ctraps tracks dependences
-that correspond to inter-thread communication.  \ctraps provides enough
-precision to build useful analyses and runtime systems with overhead low enough
-for use in production.
+The design for \ctraps that we develop in this work monitors a subset of
+inter-thread dependences that correspond to inter-thread communication.
+\ctraps provides enough precision to build useful analyses and runtime systems
+with overhead low enough for use in production.
 
 
 
 \section{Last Writer Slices}
 \label{sec:lastwriterslices}
+A last writer slice is a dynamic property of a memory location at a point in a
+program's execution.   A memory location's last writer slice is a record
+containing the program point and the identifier of the thread that last wrote
+data to that memory location.  We gather last writer slices at runtime by
+maintaining a {\em last writer table} (\lwt) that maps from a memory
+location's address to its last writer slice.  Just before a thread writes to a
+memory location,  the thread first finds the memory location's entry in the
+\lwt and updates that entry with its thread identifier and its current point in the
+program.  After updating the \lwt, the thread performs the original memory
+access.
 
-A last writer slice is a record associated with a memory location that stores
-the thread and program point that last wrote data to that memory location.  A
-last writer slice is a dynamic property of a memory location at a point in a
-program's execution.   We formalize last writer slices in
-Section~\ref{sec:lwssoundness}. 
-
-We first discuss last writer slices in more depth by describing the design of
-our support for collecting them.  The system support consists of a runtime
-library and a compiler analysis.  In Section~\ref{sec:debugging} we highlight
-the role of last writer slices in debugging and show they help diagnose real
-bugs, using case studies.
-
-\subsection{Runtime Support: Maintaining the Last Writer Table}
-We gather last writer slices at runtime by maintaining a {\em last writer
-table} (\lwt).  The \lwt is a {\em shadow memory} that holds one entry for each
-memory address accessed by the program.  Each \lwt entry records the thread and
-program point that last wrote to the entry's corresponding memory location.
-When a thread performs a write to a memory location, it updates the \lwt by
-recording its thread identifier and the program point of its write operation to
-the memory location's \lwt entry.  A program point may be an
-instruction address, or a call stack.  We use instructions by default, but our
-system supports 2-address bounded call-stacks as well.   
-
-Figure~\ref{fig:basicLWT} shows the basic operation of our runtime support.
-The right side of the figure shows a program execution with three threads.  On
-the left is the \lwt at the point of each access.  There are two key things to
+Figure~\ref{fig:basicLWT} shows the basic operation of the \lwt.  The right
+side of the figure shows a program execution with three threads.  On the left
+is the \lwt at the point of each memory access.  There are two key things to
 notice.  First, write operations update the \lwt entry of the memory location
-they access.  Second, there is no action necessary for read operations.  Making
-read operations cheap is key to making the overhead of last writer slicing low
-enough for deployment use.
+they access.  Second, there is no action necessary for read operations.
+Making read operations cheap is key to making the overhead of last writer
+slicing low enough for deployment use.
 
 \begin{figure}[h]
 \centering
@@ -408,7 +387,81 @@ enough for deployment use.
 \caption{\label{fig:basicLWT}Basic operation of the last writer table. }
 \end{figure}
 
-\subsection{Compiler Support: Analysis and Instrumentation}
+
+\subsection{Debugging with Last Writer Slices}
+\label{sec:debugging}
+%To answer data provenance questions during debugging, prior work has mostly
+%used dependence slices that include intra-thread
+%dependences~\cite{whylineicse,conseq,tipslicingsurvey}.  The overhead of
+%slicing dependence chains and tracking temporal sequences is often high,
+%relegating such techniques to working on traces~\cite{whylinechi} or debugging
+%executions run ``in the lab''.  
+
+At any point in an execution, the information stored in a memory location's
+\lwt entry represents the provenance of the data stored in that memory
+location.   Last writer slices do not explicitly record any information about
+read operations and they do not need to to be useful.  Interrupting the
+execution while debugging and examining an entry in the \lwt reveals the
+provenance of a value just when it is needed.  For example, if an assertion
+failure occurs due to an erroneous inter-thread data flow, the provenance of
+the data in the assertion's condition helps explain why the failure occurred.
+Computing last writer slices is fast enough to deploy and use continuously
+(see Section~\ref{sec:eval}) and the \lwt can be saved with a core dump.
+Thus, last writer slices can be made part of the standard debugging
+information provided when a program fails.  
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
+\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
+ordering violation in HTTrack.} The provenance information stored in the last
+writer slice for the mutex variable helps understand the bug's root cause.}
+\end{figure}
+
+%The core dump does not provide any
+%insight into why the mutex is invalid at the time of the call or what its
+%value should have been instead.
+
+
+Figure~\ref{fig:httlws} shows how last writer slices help understand the root
+cause of the concurrency bug from Figure~\ref{fig:coreDumpFail}.  Recall
+that the the program crashes at point {\bf B} when it calls {\tt
+hts\_mutex\_lock()} with an invalid mutex.    The root cause of this bug is
+that Thread 1 fails to initialize the mutex before Thread 2 uses that mutex.
+The last writer slices in the figure make this root cause clear: in the
+failing execution, the last writer slice indicates the mutex is uninitialized; in
+the non-failing execution, the last writer slice indicates the mutex was 
+initialized by Thread 1 at point {\bf A}.  This information tells the
+programmer that there is an ordering relationship between {\bf A} and {\bf B}
+that must be enforced to fix the bug.  Note that without last writer slices,
+the program crashes at {\bf B} and the core dump provides no information about
+the connection between point {\bf A} and point {\bf B} -- the programmer would be left to guess that the bug was an initialization problem.
+
+Another important trait of last writer slices illustrated by
+Figure~\ref{fig:httlws} is that last writer slices are reported back to the
+programmer {\em with the core dump on a failure}.  Capturing good debugging
+information is especially important for concurrency bugs that manifest very
+rarely or in the presence of only peculiar real-world inputs.  A primary goal
+of this work is to show that we can collect last writer slices with overheads
+that are low enough for production use so they can be included pervasively in
+bug reports.
+
+%We discuss last writer slices in more depth by first describing our run time
+%support for collecting them.  The system support consists of a runtime library
+%and a compiler analysis.  Section~\ref{sec:debugging} shows how last writer
+%slices help with debugging using our running example from
+%Figure~\ref{fig:bgcoredumpfail}.  We formalize last writer slices in
+%Section~\ref{sec:lwssoundness}.
+
+\subsection{Runtime \& Compiler Support}
+ The \lwt is implemented as a {\em shadow memory} that holds one entry for
+each memory address accessed by the program.  Each \lwt entry records the
+thread and program point that last wrote to the entry's corresponding memory
+location.  When a thread performs a write to a memory location, it updates the
+\lwt by recording its thread identifier and the program point of its write
+operation to the memory location's \lwt entry.  A program point may be an
+instruction address, or a call stack.  We use instructions by default, but we experimented with 2-address bounded call-stacks as well.   
+
 Collecting last writer slices requires instrumentation on each write operation.
 We built an instrumenting compiler pass that inserts a call into our runtime
 system just before each write to a memory location that may be accessed by code
@@ -431,6 +484,9 @@ the thread executing the function.  However, using an inter-procedural thread
 escape analysis may eliminate more instrumentation sites.  Investigating better
 instrumentation strategies is orthogonal, but an interesting subject for future
 work.
+
+
+
 
 \subsection{\lwt Formalism and Correctness}
 \label{sec:lwssoundness}
@@ -545,86 +601,6 @@ updates for larger granularity accesses, increasing overheads.
 
 
 
-
-\subsection{Debugging with Last Writer Slices}
-\label{sec:debugging}
-The WhyLine debugger~\cite{whylineicse} demonstrated that it is useful to
-enable programmers to make data provenance queries during debugging.  To answer
-such questions, prior work has mostly used dependence slices that include
-intra-thread dependences~\cite{whylineicse,conseq,tipslicingsurvey}.  The
-overhead of slicing dependence chains and tracking temporal sequences is often
-high, relegating such techniques to working on traces~\cite{whylinechi} or
-debugging executions run ``in the lab''.  
-
-The \lwt dynamically records information about write operations -- what thread
-and code point last wrote each memory location.   These last writer slices do
-not explicitly encode anything about read operations.  However, by looking at
-the \lwt at a point in the execution, the provenance of the data being read or
-over-written can be determined.  For example, if an assertion failure occurs
-due to an erroneous inter-thread data flow, the provenance of the data in the
-assertion's condition helps explain why the failure occurred.  Last writer
-slices therefore answer an important class of ``why?'' questions related to
-concurrency errors.     
-
-Computing last writer slices is fast enough to deploy and use continuously (see
-Section~\ref{sec:eval}) and the \lwt can be saved with a core dump.  Thus, last
-writer slices can be made part of the standard debugging information provided
-when a program fails.  
-
-\subsubsection{Case Studies}
-
-We illustrate the debugging benefits of last writer slices using a set of case
-studies.  In each case, we debug a buggy program using last writer slices.  We
-show that for some concurrency errors, last writer slices are a good match
-because they provide answers to important {\em ``why?''}
-questions~\cite{whylineicse}.  
-
-\paragraph{Case Study: PBZip2}
-We conducted a case study using a buggy version of PBZip2-0.9.1.    The bug is
-a use-after-delete bug that leads to an assertion failure.  A worker thread
-tries to acquire a mutex after it has been deleted by the main thread during
-shutdown, causing the assertion to fail.  
-
-Last writer slices provide the key piece of information to debug this failure: the last
-write to the mutex before the worker tried acquiring it was when the main
-thread deleted it.  A developer is likely to begin debugging by checking the
-validity of the mutex.  Upon finding it is invalid ({\em
-i.e.}, it has been deleted), the developer is likely to probe to determine who 
-deleted it.  Without the information in the \lwt, answering that question is difficult
-because the main thread may have executed arbitrarily far from where it deleted
-the mutex.  With the \lwt, answering that question only requires the developer
-to check the mutex's entry.
-
-
-\paragraph{Case Study: MySQL}
-Last writer slices were also useful for debugging a logging system failure in
-MySQL-4.0.12.  The bug is an atomicity violation involving two threads.  One
-thread rotates the database's log file.  Log rotation involves closing the log
-file, marking the log closed, opening a new log file, and marking the log open.
-Log rotation should be atomic, but lack of synchronization allows another
-thread to run queries during rotation.  The query code checks if the log is
-marked closed; if it is not closed, the queries are logged, but if it is
-closed, the queries are not logged and the program simply continues.  We added
-an assertion to the non-logging case because this behavior is a security
-vulnerability.  The bug report describes the bug as ``critical'', so it is
-reasonable to assume a programmer that expected all queries to be logged would
-write such an assertion after the bug was reported.
-
-We ran the program and concurrently issued a log rotation command, and an
-insert query.  The bug manifested ({\em i.e.}, the queries went unlogged) and
-our assertion failed, dumping core.  Examining the log's last writer slice in
-GDB allowed examining the last thread to mark the log closed.  We discerned it
-was the log rotation thread that last marked the log closed during log
-rotation.  Knowing how the log ended up marked closed enables reasoning about
-what code to change ({\em e.g.}, added synchronization) to prevent the
-situation in the future.
-
-While a developer is likely to understand the symptom of the bug (queries go
-unlogged) without the information in the \lwt, understanding {\em why} it is marked closed would be
-difficult.  This example illustrates how the \lwt fills in the crucial inter-thread
-dependence that helps understand why the program failed.
-
-\paragraph{Case Study: HTTrack}
 
 
 \section{Communication Traps}
@@ -994,19 +970,76 @@ simpler than a chaining concurrent hash table implementation.  Collisions are
 extremely rare, so this simplification is unlikely to be a problem even in a
 more industrial strength implementation.  
 
-
-
-
 \section{Evaluation}
 \label{sec:eval}
-We evaluated our design along several axes. Recall that in
-Section~\ref{sec:debugging} we illustrated the debugging benefits of last
-writer slices using case studies.   We evaluate our performance overheads to
-demonstrate that last writer slices and \ctraps are feasible for use in
-deployed systems.  We discuss the sources of \ctraps' overhead.   We show that
-\ctraps is useful by implementing two existing applications and analyzing their
-performance.  We characterize our instrumentation and the precision and
-performance impact of our redundancy analysis.  
+We evaluated our design along several axes.  We illustrate the debugging
+benefits of last writer slices in Section~\ref{sec:eval:debugging} using case
+studies conducted using real, buggy programs on real.   We evaluate our
+performance overheads to demonstrate that last writer slices and \ctraps are
+feasible for use in deployed systems.  We discuss the sources of \ctraps'
+overhead.   We show that \ctraps is useful by implementing two existing
+applications and analyzing their performance.  We characterize our
+instrumentation and the precision and performance impact of our redundancy
+analysis.  
+
+\subsection{Debugging with Last Writer Slices}
+\label{sec:eval:debugging}
+We illustrate the debugging benefits of last writer slices using three case
+studies.    
+
+\paragraph{Case Study: HTTrack}
+The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
+and the text in Section~\ref{sec:httdebug} describes the benefit provided by
+last writer slices in debugging an ordering violation in HTTrack-3.43.9.  
+
+\paragraph{Case Study: PBZip2}
+We conducted a case study using a buggy version of PBZip2-0.9.1.    The bug is
+a use-after-delete bug that leads to an assertion failure.  A worker thread
+tries to acquire a mutex after it has been deleted by the main thread during
+shutdown, causing the assertion to fail.  
+
+Last writer slices provide the key piece of information to debug this failure:
+the last write to the mutex before the worker tried acquiring it was when the
+main thread deleted it.  A developer is likely to begin debugging by checking
+the validity of the mutex.  Upon finding it is invalid ({\em i.e.}, it has
+been deleted), the developer is likely to probe to determine who deleted it.
+Without the information in the \lwt, answering that question is difficult
+because the main thread may have executed arbitrarily far from where it
+deleted the mutex.  With the \lwt, answering that question only requires the
+developer to check the mutex's entry.
+
+
+\paragraph{Case Study: MySQL}
+Last writer slices were also useful for debugging a logging system failure in
+MySQL-4.0.12.  The bug is an atomicity violation involving two threads.  One
+thread rotates the database's log file.  Log rotation involves closing the log
+file, marking the log closed, opening a new log file, and marking the log open.
+Log rotation should be atomic, but lack of synchronization allows another
+thread to run queries during rotation.  The query code checks if the log is
+marked closed; if it is not closed, the queries are logged, but if it is
+closed, the queries are not logged and the program simply continues.  We added
+an assertion to the non-logging case because this behavior is a security
+vulnerability.  The bug report describes the bug as ``critical'', so it is
+reasonable to assume a programmer that expected all queries to be logged would
+write such an assertion after the bug was reported.
+
+We ran the program and concurrently issued a log rotation command, and an
+insert query.  The bug manifested ({\em i.e.}, the queries went unlogged) and
+our assertion failed, dumping core.  Examining the log's last writer slice in
+GDB allowed examining the last thread to mark the log closed.  We discerned it
+was the log rotation thread that last marked the log closed during log
+rotation.  Knowing how the log ended up marked closed enables reasoning about
+what code to change ({\em e.g.}, added synchronization) to prevent the
+situation in the future.
+
+While a developer is likely to understand the symptom of the bug (queries go
+unlogged) without the information in the \lwt, understanding {\em why} it is marked closed would be
+difficult.  This example illustrates how the \lwt fills in the crucial inter-thread
+dependence that helps understand why the program failed.
+
+
+
+
 
 \subsection{Setup and Benchmarks}
 
