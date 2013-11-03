@@ -65,40 +65,36 @@ Multi-threaded programming is challenging.  In contrast to the simplicity of
 sequential reasoning, multi-threaded programs require complex reasoning about
 many threads of control and their interactions.  In shared memory programs,
 threads interact by reading and writing memory locations.  Threads' reads and
-writes interleave arbitrarily and nondeterministically, with each interleaving
-potentially yielding different execution behavior.  The complexity of reasoning
-about thread interactions is a central challenge to building multi-threaded
-software.  
+writes interleave arbitrarily and nondeterministically and each interleaving
+can yield different behavior.  Reasoning about thread interactions is a central
+challenge to building multi-threaded software because some thread interactions
+have undesirable consequences, like causing a crash or degrading performance.
 
-When programmers reason incorrectly, they permit some interleavings that should
-be forbidden.  When such interleavings occur, program executions may fail,
-experience performance degradation, or suffer other undesirable behavior.
-Preventing such undesirable behavior is a fundamental challenge faced by
-software engineers.  An important way to understand program behavior is to
-monitor which read and write operations depend on one another.  Memory
-operations are dependent if their order determines the values they read or
-write.  The value of dependence information is made especially clear by its
-prevalent use during manual program debugging and in support of program
-analysis tools.
+A common approach to this challenge is to reason about dependent memory
+operations.  Memory operations are dependent if their order determines the
+values they read or write.  The utility of dependence information is made
+especially clear by its prevalent use during manual program debugging and in
+support of program analysis tools.
 
 Debugging a concurrent program requires understanding how threads interact and
-dependence information furnishes that understanding.  Programmers debug
-programs more effectively when they can ask questions about the provenance of
-values during a program's execution~\cite{slicingsurvey,whylineicse}.
-Dependence information helps programmers with the difficult task of identifying
-control- and data-flows that influenced a particular data value at a particular
-point.  In concurrent programs, data provenance information is vital because
-influential control- and data-flows may be in any thread, making the task of
-understanding the origin of a value much more complex.
+dependence information furnishes that understanding.  Dependence information
+helps programmers with the difficult task of identifying control- and
+data-flows that influenced a particular data value at a particular point.
+Programmers debug programs more effectively when they can ask questions about
+the provenance of values during a program's
+execution~\cite{slicingsurvey,whylineicse}.  In concurrent programs, data
+provenance information is particularly valuable because data may originate from
+any of a potentially large number of threads, making reasoning complex.
 
 Compounding this complexity, many concurrency bugs manifest as failures rarely.
 When a deployed system fails and a programmer receives a bug report,
-reproducing the reported failure to collect dependence information may be
+reproducing the reported failure to collect provenance information may be
 difficult or impossible.  It is essential to collect as much information as
-possible in deployed systems to reduce the need for time-consuming forensic bug
-reproduction.  Unfortunately, prior approaches to tracking dependences in
-concurrent code~\cite{raceslicing,tipslicingsurvey} impose high run time
-overheads.  These overheads are prohibitively high for use in production. 
+performance margins permit from deployed systems, to reduce the need for
+time-consuming failure reproduction.  Unfortunately, prior approaches to
+tracking dependences in concurrent code~\cite{raceslicing,tipslicingsurvey}
+impose high run time overheads.  These overheads are prohibitively high for use
+in production. 
 
 
 
@@ -111,9 +107,7 @@ overheads.  These overheads are prohibitively high for use in production.
 %\cite{avio,cci,defuse,recon,bugaboo,falcon,dmtracker,aviso,cfix,criticalitypredictors,schedpredictionmodel}
 
 Dependence information is also an important part of many program analysis
-tools.  Prior work has used dependence information to reduce the burden of
-making reliable, efficient concurrent software.  Bug
-detection~\cite{avio,fasttrack,raceslicing,dmtracker} and
+tools.    Bug detection~\cite{avio,fasttrack,raceslicing,dmtracker} and
 debugging~\cite{tipslicingsurvey,bugaboo,recon,cci,defuse,conseq,falcon} tools
 analyze inter-thread dependences to find buggy behavior and help programmers
 understand their errors.
@@ -122,7 +116,11 @@ dependences to find optimization opportunities.  Dependences are also essential
 to some program understanding systems~\cite{oshatr} and dynamic checkers for
 thread interaction properties~\cite{oshajava,velodrome}.
 Record-Replay~\cite{chimera,doubleplay,fdr,rtr} systems track and record the
-order of dependent events to help reproduce failures.  
+order of dependent events to help reproduce failures.  These systems would be
+even more valuable, if their underlying dependence analysis was run in
+production.  However, the heavy-weight analyses proposed by many of these
+systems impose overheads too high for production use (5-100x
+slowdown)~\cite{raceslicing,dmtracker,velodrome,recon,defuse,oshajava,chimera,coredet,stm}.
 
 %Deterministic execution
 %systems~\cite{coredet,grace} monitor dependences to determine how and when to
@@ -130,28 +128,20 @@ order of dependent events to help reproduce failures.
 %trasactional memory (STM) systems~\cite{stm} monitor dependences to identify
 %conflicts between concurrently executing atomic code regions.  
 
-These systems would be especially valuable, if run in production systems on
-deployed code.  However, as with dependence tracking on its own, most of these
-systems have overheads too high for use in production (5-100x
-slowdown)~\cite{raceslicing,dmtracker,velodrome,recon,defuse,oshajava,chimera,coredet,stm}.
-
-
-The key to reducing the overhead of dependence tracking is to carefully select
-and monitor only a {\em subset} of dependences.  We start from two simple
-observations: (1) Reads are frequent so we must minimize tracking overheads on
-reads, and (2) In concurrency analyses, {\em inter-thread} dependences are most
-important.  Based on these observations, we focus on dependences that reflect
-{\em communication} between threads.  Communication occurs when a thread reads
-or overwrites a memory location that was most recently written by a different
-thread; {\em i.e.}, inter-thread read-after-write (RAW) and write-after-write
-(WAW).  Tracking only communication dependences preserves enough information to
-implement useful applications and analyses, but has low enough overhead for
-always-on use in production systems.
-
-Framed by these observations, we demonstrate in this work that a 
-versatile form of inter-thread dependence-tracking analysis has inherent
-overheads that are low enough for use in deployed systems.  There are two parts
-to our work:
+Our goal in this work is to collect, with deployable efficiency, useful
+dependence information that captures data provenance for use in debugging and
+serves as a foundation for more sophisticated program analyses.  We start from
+two simple observations: (1) Reads are frequent so we must minimize tracking
+overheads on reads, and (2) In concurrency analyses, {\em inter-thread}
+dependences are most important.  Based on these observations, we focus first on
+tracking write-after-write dependences (WAWs), which reflect data provenance.
+Building on that, we describe support for tracking {\em communication
+dependences}.  Communication occurs when a thread reads or overwrites a memory
+location that was most recently written by a different thread; {\em i.e.},
+inter-thread read-after-write dependences (RAWs) as well as (WAWs).  In this
+work, we demonstrate that this form of light-weight dependence tracking is
+useful and versatile, and has inherent overheads that are low enough for use in
+deployed systems.  There are two parts to our work:
 
 First, we describe {\em last writer slices}
 (Section~\ref{sec:lastwriterslices}).  Last writer slices record the thread and
@@ -172,37 +162,35 @@ systems for a variety of applications.
 Second, on top of last writer slices we build {\em Communication Traps} or {\em
 \ctraps}  (Section~\ref{sec:ctraps}).  \ctraps monitors inter-thread
 communication with overhead low enough for production use in many important
-cases.  When threads communicate, \ctraps delivers a software {\em trap} that can be
-handled by a trap handler.  Trap handlers implement {\em \ctraps applications}
-through an extensible interface that can analyze or interpose on the execution
-(Section~\ref{sec:apps}).  By default, \ctraps has very low overhead.  \ctraps
-applications can perform arbitrary dependence analyses, but at their own
-discretion and cost.  As we show in our evaluation, the overhead of \ctraps
-applications scales with the complexity of their analysis.
+cases.  When threads communicate, \ctraps delivers a software {\em trap} that
+can be handled by a trap handler.  Trap handlers implement {\em \ctraps
+applications} through an extensible interface that can analyze or interpose on
+the execution (Section~\ref{sec:apps}).  By default, \ctraps has very low
+overhead.  \ctraps applications can perform arbitrary dependence analyses, but
+at their own discretion and cost.  As we show in our evaluation, the overhead
+of \ctraps applications scales with the complexity of their analysis.
 
 \paragraph{Contributions of This Work}
 To summarize, this work makes several contributions:
 \begin{itemize}
 
-\item{We discuss last-writer slices, an abstraction that dynamically tracks
-memory updates, capturing inter-thread dependence information.  We
-design and implement system support for collecting last writer slices.  We
-present two cases studies that show that last writer slices are useful for
-diagnosing real-world bugs.}
+\item{We describe last writer slicing, a dynamic analysis that tracks
+memory updates, capturing data provenance information.  We
+design and implement system support for collecting last writer slices.  }
 
-\item{Building on last-writer slices, we describe and implement \ctraps, which
-exposes inter-thread communication through an extensible trap interface.
-We also look at an optimization to \ctraps that explores trading off
-precision for performance.}
+\item{Building on last writer slicing, we describe and implement \ctraps, which
+exposes inter-thread communication through an extensible trap interface.  }
 
-\item{We demonstrate that \ctraps provides a simple platform for building
+\item{We evaluate the utility of last writer slices and \ctraps. We first
+present several case studies that show that last writer slices are useful for
+debugging real-world bugs.  We then show how \ctraps is useful for building
 dependence analyses by implementing two analyses from prior
 work~\cite{cci,defuse,recon}. }
 
-\item{We implement last writer slicing and \ctraps and evaluate their performance using a
-variety of important applications ({\em e.g.}, MySQL, memcached and the PARSEC
-benchmarks~\cite{parsec}).  We show that in many cases our designs have overheads
-low enough for use in deployment (0--15\%).}
+\item{We evaluate our system's performance using a variety of important
+applications ({\em e.g.}, MySQL, memcached and the PARSEC
+benchmarks~\cite{parsec}).  We show that in many cases our designs have
+overheads low enough for use in deployment (0--15\%).}
 
 \end{itemize}
 
@@ -384,7 +372,7 @@ slicing low enough for deployment use.
 \begin{figure}[h]
 \centering
 \includegraphics[scale=.6]{figs/BasicLWT.pdf}
-\caption{\label{fig:basicLWT}Basic operation of the last writer table. }
+\caption{\label{fig:basicLWT}Basic operation of the last writer table. Different shapes signify different distinct memory operations. }
 \end{figure}
 
 
@@ -476,30 +464,25 @@ memory locations that can be statically guaranteed to be inaccessible to code
 running in other threads.  When a thread accesses a location that is
 inaccessible to code in other threads, there is no way that access can be a
 communicating access.  Such accesses are not instrumented by our compiler.  
-
-We rely on {\tt GCC}'s built-in escape analysis to determine if a memory
-operation might lead to communication.  This analysis is a function escape
-analysis.  Locations determined not to escape function scope also cannot escape
-the thread executing the function.  However, using an inter-procedural thread
-escape analysis may eliminate more instrumentation sites.  Investigating better
-instrumentation strategies is orthogonal, but an interesting subject for future
-work.
-
-
+We rely on {\tt GCC}'s built-in function escape analysis to determine if a
+memory operation might lead to communication.  Locations determined not to
+escape function scope also cannot escape the thread executing the function.
+%Using an inter-procedural thread escape analysis may eliminate more
+%instrumentation sites.  
 
 
 \subsection{\lwt Formalism and Correctness}
 \label{sec:lwssoundness}
 To discuss the correctness of our \lwt-based last writer slice support, we
 first develop a formal description of last writer slices.  We consider an
-N-threaded program $P = \{P_1, P_2, \ldots P_N\}$, where $P_i = (p^{i}_{1},
-p^{i}_{2}, \ldots, p^{i}_{k_{i}})$ is the sequence of $k_{i}$ dynamic
-instructions executed by thread $i$.  Without loss of generality, we assume all
+N-threaded program $P = \{P_1, P_2, \ldots P_N\}$, where $P_t = (p^{t}_{1},
+p^{t}_{2}, \ldots, p^{t}_{k_{t}})$ is the sequence of $k_{t}$ dynamic
+instructions executed by thread $t$.  Without loss of generality, we assume all
 instructions are memory reads and writes, with the form $Op(m)$ where $Op$ is
 $Read$ or $Write$ and $m$ is a uniquely addressed memory location.
 A point in an execution of $P$ after $e$ instructions have
-executed is defined by $Q = (q_{0}, \ldots, q_{e})$ where each $q \in Q$ is a
-$p^{i}_{j}$ from one of the $k_i$ instructions of thread $i$.  We introduce
+executed is defined by $Q = \{q_{0}, \ldots, q_{e}\}$ where each $q \in Q$ is a
+$p^{t}_{j}$ from one of the $k_t$ instructions of thread $t$.  We introduce
 $LWS[m]$ -- the Last Writer Slice for memory location $m$.   At any point $Q$,
 $LWS[m]$ holds $(t,p^{t}_{\ell w})$, where $p^{t}_{\ell w} = max_{\ell}( 
 q_{\ell} = Write(m) \in Q)$ and $t$ is the thread that
@@ -511,66 +494,83 @@ unwritten.
 For our design to be correct, $LWT[m]$, the entry for a memory location $m$ in
 our \lwt implementation, must be the same as $LWS[m]$ at all points in an
 execution.  Correctness in the \lwt requires {\em soundness} and {\em
-completeness}.  A {\em sound} design only updates $LWT[m]$ when $m$ is
-written.  A {\em complete} design always updates $LWT[m]$ when $m$ is written.
-Our compiler inserts \lwt updates before every write
-operation (for completeness) and only before write operations (for soundness).
-Formally, given a program, $P$, our compiler pass transforms it to a new
-program, $P'$.  Each thread in $P'$ executes a modified sequence of
-instructions: $P'_{i} \in P' = \{ I(p^{i}_{1}), p^{i}_{1}, \ldots,
-I(p^{i}_{k_{i}}), p^{i}_{k_{i}} \}$.  $I(p^{t}_{j})$ sets $LWT[m] =
-(t,p^{t}_{j})$ if and only if $p^{t}_{j} = Write(m)$ and is a no-op otherwise.
+completeness}.  A {\em sound} design only updates $LWT[m]$ when $m$ is written.
+A {\em complete} design always updates $LWT[m]$ when $m$ is written.  Our
+compiler inserts \lwt updates before every write operation (for completeness)
+and only before write operations (for soundness).  Formally, given a program,
+$P$, our compiler pass transforms it to a new program, $P'$.  Each thread in
+$P'$ executes a modified sequence of instructions: $P'_{t} \in P' = \{
+I(p^{t}_{1}), p^{t}_{1}, \ldots, I(p^{t}_{k_{t}}), p^{t}_{k_{t}} \}$.
+$I(p^{t}_{j})$ sets $LWT[m] = (t,p^{t}_{j})$ if and only if $p^{t}_{j} =
+Write(m)$ and is a no-op otherwise.  This reasoning shows our \lwt is both
+sound, complete, and thus correct.
 
-Thus, our \lwt is correct under the two main assumptions of our formalism: (1)
-there are no data races in the execution; and (2) each memory location
-referenced by a write refers to a unique region of memory that does not overlap
-with another referenced region.  
+Next we discuss two nuances of our design: (1) the interaction of our \lwt
+implementation with code containing data-races; and (2) the correctness of the
+\lwt when a program addresses data that overlap in memory. 
 
-\paragraph{Performance, Atomicity, and Sequential Consistency}
+\paragraph{Consistency and Atomicity}
 
-We do not enforce the atomicity of \lwt updates and their corresponding program
-accesses.  This design choice, made in prior work~\cite{fasttrack,recon},
-allows us to omit the synchronization operations that enforce the atomicity of
-these operations.  The benefit of omitting these synchronization operations is
-that overhead of our analysis is reduced. The downside is that our analysis is
-vulnerable to violations of the atomicity of \lwt updates and their
-corresponding accesses. Importantly, however, these violations can only occur
-in programs with data-races and all programs with data-races do not necessarily
-corrupt the \lwt. 
+Our implementation of the \lwt does not add any synchronization to the program.
+As a result our analysis does not incur the overheads or possible thread
+schedule perturbation synchronization can cause.  However, there are two
+potential issues that stem from this design choice. First, we do not enforce
+memory consistency of meta-data reads and writes in different threads.  Second,
+our implementation does not enforce the atomicity of \lwt updates and their
+corresponding program accesses.  In the absence of data-races our \lwt
+implementation is {\em always correct} and neither of these issues exist.  Both
+atomicity and ordering is enforced by the program synchronization that ensures
+consistency for the data being written by the instructions our system
+instruments.   
 
-We use our \lwt formalism from above to characterize how data-races can
-interfere with \lwt updates.  The relation $p \prec q$ denotes that $p$ happens
-before $q$.  In the absence of data-races, any write by thread $t$ to $m$,
-$p^{t}_{j} = Write(m)$, is ordered by program synchronization with $p^{t'}_{j'}
-= Op(m)$, a later access to $m$ by any other thread $t'$ -- {\em i.e.},
-$p^{t}_{j} \prec p^{t'}_{j'}$.  Our compiler inserts an \lwt update
-$I(p^{t}_{j})$ into $P'$ before its write operation, $p^{t}_{j}$, so
-$I(p^{t}_{j}) \prec p^{t}_{j}$.  Happens-before is transitive, so without
-data-races, $I(p^{t}_{j}) \prec p^{t}_{j} \prec I(p^{t'}_{j'}) \prec
-p^{t'}_{j'}$, meaning $I(p^{t}_{j})$ happens before all accesses that
-$p^{t}_{j}$ happens before {\em and before their respective \lwt updates},
-$I(p^{t'}_{j'})$.  Symmetrically, for any access $p^{t''}_{j''}$ in another
-thread $t''$ that precedes $p^{t}_{j}$, $p^{t''}_{j''} \prec p^{t}_{j}$.  Our
-compiler inserts each $I(p^{t}_{j})$ immediately before each $p^{t}_{j}$, so
-$I(p^{t''}_{j''}) \prec p^{t''}_{j''} \prec I(p^{t}_{j}) \prec p^{t}_{j}$,
-happens-before ordering $I(p^{t}_{j})$ after all preceding accesses to $m$ in
-other threads, {\em and after their repective \lwt updates}.  Thus, at all
-points $Q$ in a data-race free execution, given $q_r = I(p^{t}_{j})$, $q_p =
-p^{t}_{j}$, and $q_r \prec q_p$, $\forall_{ \{q_s | q_r \prec q_s \prec q_p
-\}}: q_s \ne Op(m) \wedge q_s \ne I(Op(m)) $.  In other words, \lwt updates and
-their accesses are atomic.
+We use our \lwt formalism to show that without data-races, \lwt updates and
+their corresponding memory accesses are atomic and well-ordered.  The relation
+$p \prec q$ denotes that $p$ happens before $q$.  In correctly synchronized
+code, any write by thread $t$ to $m$, $p^{t}_{j} = Write(m)$, is ordered by
+program synchronization with $p^{t'}_{j'} = Op(m)$, a later access to $m$ by
+any other thread $t'$ -- {\em i.e.}, $p^{t}_{j} \prec p^{t'}_{j'}$.  Our
+compiler inserts an \lwt update $I(p^{t}_{j})$ into $P'$ before its write
+operation, $p^{t}_{j}$. Thus, $I(p^{t}_{j}) \prec p^{t}_{j}$ due to program
+order.  Happens-before is transitive, so without data-races, $I(p^{t}_{j})
+\prec p^{t}_{j} \prec I(p^{t'}_{j'}) \prec p^{t'}_{j'}$, meaning $I(p^{t}_{j})$
+happens before all accesses that $p^{t}_{j}$ happens before {\em and before
+their respective \lwt updates}, $I(p^{t'}_{j'})$.  Symmetrically, for any
+access $p^{t''}_{j''}$ in another thread $t''$ that precedes $p^{t}_{j}$,
+$p^{t''}_{j''} \prec p^{t}_{j}$.  Our compiler inserts each $I(p^{t}_{j})$
+immediately before each $p^{t}_{j}$, so $I(p^{t''}_{j''}) \prec p^{t''}_{j''}
+\prec I(p^{t}_{j}) \prec p^{t}_{j}$, happens-before ordering $I(p^{t}_{j})$
+after all preceding accesses to $m$ in other threads, {\em and after their
+repective \lwt updates}.  Thus, at all points $Q$ in a data-race free
+execution, given $q_r = I(p^{t}_{j})$, $q_p = p^{t}_{j}$, and $q_r \prec q_p$,
+$\forall_{ \{q_s | q_r \prec q_s \prec q_p \}}: q_s \ne Op(m) \wedge q_s \ne
+I(Op(m)) $.  In other words, \lwt updates and their accesses are atomic.
 
-With data-races, \lwt updates and their accesses may not be atomic ({\em i.e.},
-such a $q_s$ can exist).  Instrumentation calls for racy accesses are not
-ordered by happens-before, so they may interleave arbitrarily.  With races, an
-execution could reach a state $Q_{bad} = (\ldots, I(p^{t}_{j}), I(p^{t'}_{j'}),
-p^{t'}_{j'}, p^{t}_{j}, \ldots)$.  In such a state, $LWS[m] = (t,p^{t}_{j})$,
-but $LWT[m] = (t',p^{t'}_{j'})$.  The \lwt was effectively not updated when
-$p^{t}_{j}$ executed (violating completeness), or was effectively updated to
-reflect that $p^{t'}_{j'}$ was $m$'s last writer, when $p^{t}_{j}$ was
-(violating soundness).  This edge case is incorrect. However, we expect it is
-also uncommon in practice, so last writer slices are usually correct, even in
-racy programs.
+In a program with a data-race, there are some accesses, $p^{t}_{j}$ and
+$p^{t'}_{j'}$, that are concurrent.  The \lwt updates for these accesses are
+also concurrent because they are not transitively ordered by the accesses' ordering.  The unordered accesses and \lwt updates can interleave arbitrarily
+because they are concurrent.  Some racy thread schedules may violate the
+atomicity of accesses and their \lwt updates.  Such an execution could reach a
+state $Q_{bad} = (\ldots, I(p^{t}_{j}), I(p^{t'}_{j'}), p^{t'}_{j'}, p^{t}_{j},
+\ldots)$ and in that state, $LWS[m] = (t,p^{t}_{j})$, but $LWT[m] =
+(t',p^{t'}_{j'})$.  The \lwt was effectively not updated when $p^{t}_{j}$
+executed (violating completeness), or was effectively updated to reflect that
+$p^{t'}_{j'}$ was $m$'s last writer, when $p^{t}_{j}$ was (violating
+soundness).    
+
+According to the C++11 language specification, in the presence of a data-race,
+a program's behavior is undefined and arbitrary state corruption can occur.  In
+the presence of data-races, {\em any} analysis, including our \lwt analysis,
+running on such a program could experience arbitrary corruption.  In practice
+({\em e.g.}, on x86) these atomicity violations may cause limited \lwt
+corruption, but even this is unlikely.  These atomicity violations only occur
+only when accesses to the same data occur within a very short time interval,
+which is uncommon, {\em and} an unserializable interleaving of accesses and
+\lwt updates also occurs.
+
+{\bf TODO: Figure?}
+
+
+
 
 \paragraph{Non-overlapping Memory References} 
 We assume each written memory location corresponds to a non-overlapping memory

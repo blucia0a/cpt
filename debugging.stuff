@@ -157,3 +157,49 @@ HTSEXT_API void hts_mutexinit(htsmutex* mutex) {
 
 
 
+
+---------------------------
+
+JDK StringBuffer
+
+Assertion failure @: 
+ 0x0000000000400df2 in StringBuffer::getChars (this=this@entry=0x603040, 
+    srcBegin=srcBegin@entry=0, srcEnd=srcEnd@entry=3, dst=0x608220 "", 
+    dstBegin=0) at stringbuffer.cpp:54
+54	    assert(0 && "(srcEnd < 0) || (srcEnd > count)");
+
+(gdb) inspect srcEnd
+$9 = 3
+(gdb) inspect srcBegin
+$10 = 0
+(gdb) inspect count
+$11 = 0
+
+Conclusion: something has written over srcEnd, srcBegin, or count.
+
+srcEnd, srcBegin, in registers.  Couldn't have been written over.
+count: in memory.
+
+(gdb) print /x LWT_table[ ((unsigned long)&count) & 0xffffff ]
+$5 = 0x1000000400f01
+(gdb) x 400f01
+Invalid number "400f01".
+(gdb) x 0x400f01
+0x400f01 <StringBuffer::erase(int, int)+179>:	0x0c638944
+stringbuffer.cpp:107    count -= len;
+
+
+  int len = sb->length();//Thread 1: acquire lock, get len, release lock
+  //Thread 2 erases characters from sb.  updates count to count - num_erased
+  int newcount = count + len;
+  if (newcount > value_length)
+    expandCapacity(newcount);
+  sb->getChars(0, len, value, count);//Thread 1: get len characters from sb -
+                                     //if sb has fewer than len characters, 
+                                     //assert fails.  At this point, 
+                                     //count -= len @ erase, ln 107 is the 
+                                     //last writer of sb->count
+  //Thread 2's erase left sb with fewer than len chars, so assert fails!
+
+
+
