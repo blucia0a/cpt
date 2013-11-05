@@ -994,7 +994,7 @@ studies.
 
 \paragraph{HTTrack}
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
-and the text in Section~\ref{sec:httdebug} describes the benefit provided by
+and the text in Section~\ref{sec:debugging} describes the benefit provided by
 last writer slices in debugging an ordering violation in HTTrack-3.43.9.  
 
 \paragraph{PBZip2}
@@ -1039,8 +1039,8 @@ report, the query went unlogged and examining the core dump revealed the log
 was marked closed at point {\bf B}.  However, the core dump did not reveal {\em
 why} the log was marked closed there.  Looking at the last writer slice for the
 {\tt log\_type} variable shows that it was written last Thread 1 at {\bf A}.
-Seeing here that {\tt log\_type} is accessed by multiple threads
-suggests adding synchronization to prevent this atomicity violation.
+Seeing that {\tt log\_type} is accessed concurrently in inserts and
+log rotations shows where synchronization needs to be added to fix the bug.
 
 
 
