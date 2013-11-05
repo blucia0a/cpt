@@ -44,19 +44,23 @@
 
 We design efficient system support for collecting {\em last writer slices} for
 shared-memory concurrent programs.  Last writer slices dynamically track memory
-updates.  Last writer slices encode the provenance of values in memory, helping
-with debugging.   We build on last writer slices, developing {\em communication
-traps} (\ctraps).  \ctraps uses system support to efficiently monitor and
-interpose on inter-thread memory dependences.  \ctraps provides an extensible
-framework, exposing inter-thread dependences to {\em \ctraps applications}.
-These can implement arbitrary dependence analyses.  
+updates.  Last writer slices reflect the provenance of values in memory,
+information that is useful during debugging.   Using last writer slices,
+we build {\em communication traps} (\ctraps).  \ctraps is a mechanism that
+efficiently monitors and can interpose on memory operations that share data
+between threads.  \ctraps is an extensible framework, exposing
+inter-thread dependences to {\em \ctraps applications} that can implement
+arbitrary dependence analyses.  
 
-We implement last writer slicing and \ctraps.  We show \ctraps is useful by
-implementing two applications from prior work. We show that last writer slices
-help with debugging using case studies of real-world bugs.  We evaluate our
-designs on a set of server programs and standard benchmarks.  Our results show
-\ctraps imposes overheads low enough for use in production systems (0--15\%)
-running important services, like memcached, LevelDB, MySQL, and Apache.
+We implement last writer slicing and \ctraps.  We show that last writer slices
+provide information that is useful for debugging several real-world bugs.  We
+show \ctraps is useful by implementing two concurrency analyses from prior
+work.  We evaluate our designs on a set of server programs and standard
+benchmarks.  Our results show that collecting last writer slices has low run
+time overheads (0--15\%) for many important applications, like memcached,
+LevelDB, MySQL, and Apache.  We show that \ctraps imposes low run time
+overheads by default and that the overheads scale with the complexity of the
+analysis being implemented.
 
 \end{abstract}
 
@@ -78,13 +82,14 @@ support of program analysis tools.
 
 Debugging a concurrent program requires understanding how threads interact and
 dependence information furnishes that understanding.  Dependence information
-helps programmers with the difficult task of identifying control- and
-data-flows that influenced a particular data value at a particular point.
-Programmers debug programs more effectively when they can ask questions about
-the provenance of values during a program's
-execution~\cite{slicingsurvey,whylineicse}.  In concurrent programs, data
+helps programmers with the difficult task of reasoning about the {\em
+provenance} of a memory location's value -- control- and data-flows that
+influenced that value.  Programmers debug programs more effectively when they
+have access to a value's provenance at points during a program's
+execution~\cite{tipslicingsurvey,whylineicse}.  In concurrent programs, data
 provenance information is particularly valuable because data may originate from
-any of a potentially large number of threads, making reasoning complex.
+any of a potentially large number of threads, making reasoning without explicit
+provenance information complex and difficult.
 
 Compounding this complexity, many concurrency bugs manifest as failures rarely.
 When a deployed system fails and a programmer receives a bug report,
@@ -134,24 +139,25 @@ serves as a foundation for more sophisticated program analyses.  We start from
 two simple observations: (1) Reads are frequent so we must minimize tracking
 overheads on reads, and (2) In concurrency analyses, {\em inter-thread}
 dependences are most important.  Based on these observations, we focus first on
-tracking write-after-write dependences (WAWs), which reflect data provenance.
-Building on that, we describe support for tracking {\em communication
-dependences}.  Communication occurs when a thread reads or overwrites a memory
-location that was most recently written by a different thread; {\em i.e.},
-inter-thread read-after-write dependences (RAWs) as well as (WAWs).  In this
-work, we demonstrate that this form of light-weight dependence tracking is
-useful and versatile, and has inherent overheads that are low enough for use in
-deployed systems.  There are two parts to our work:
+tracking write-after-write dependences (WAWs), which provide a useful form of
+data provenance information.  Building on that, we describe support for
+tracking {\em communication dependences}.  Communication occurs when a thread
+reads or overwrites a memory location that was most recently written by a
+different thread; {\em i.e.}, inter-thread read-after-write dependences (RAWs)
+as well as WAWs.  In this work, we demonstrate that this form of light-weight
+dependence tracking is useful and versatile, and has inherent overheads that
+are low enough for use in deployed systems.  There are two parts to our work:
 
 First, we describe {\em last writer slices}
 (Section~\ref{sec:lastwriterslices}).  Last writer slices record the thread and
 program point that last wrote each memory location.     Last writer slices are
-useful because they expose the {\em provenance} of a memory location's contents
+useful because they expose the provenance of a memory location's contents
 during debugging (Section~\ref{sec:debugging}).  When a failure occurs, last
 writer slices are saved with a core dump.  Last writer slices are also
-available during an execution in the debugger.  Note that while prior work
-({\em e.g.}, ~\cite{recon,fasttrack,conmem,conseq,cci}) has relied on {\em ad
-hoc} last-writer analyses, in this work, we isolate the essential last-writer
+available during an execution in the debugger ({\em e.g.}, at breakpoints).
+Note that while prior work ({\em e.g.},
+~\cite{recon,fasttrack,conmem,conseq,cci}) has relied on {\em ad hoc}
+last-writer analyses, in this work, we isolate the essential last-writer
 information in the form of last writer slices and provide an implementation
 with overheads appropriate for production systems.  Tracking last writer slices
 has low overhead because it imposes overhead on only write operations:  reads
@@ -575,29 +581,28 @@ which is uncommon, {\em and} an unserializable interleaving of accesses and
 \paragraph{Non-overlapping Memory References} 
 We assume each written memory location corresponds to a non-overlapping memory
 region because our \lwt design is {\em granularity oblivious}.  We discuss this
-issue only informally due to space constraints.  Each \lwt entry corresponds to
-a memory location referenced by a program instruction.  Two instructions might
-reference different locations that actually overlap because the referenced
-locations have different granularities.  When that happens, both accesses
-update different \lwt entries, because they reference different locations.
-However, the overlapping region then has two different, inconsistent entries
-reflecting its last {\em two} updates, rather than just its last write.
+issue informally due to space constraints.  Each \lwt entry corresponds to a
+memory location referenced by a program instruction.  Two instructions might
+reference different locations that overlap because the referenced locations
+have different granularities ({\em e.g.}, accessing a byte that is part of a
+previously accessed word).  When that happens, both accesses update different
+\lwt entries, because they reference different locations.  However, the
+overlapping region then has two different entries reflecting the last {\em two}
+updates to its parts rather than just its last write.
 
-For example, one instruction might write a word and another might later write
-the second byte of that word.  The word access updates the word's \lwt entry.
-The byte access updates a second \lwt entry for the byte address.  However, the
-byte is part of the previously written word, meaning the \lwt entry for the
-word no longer reflects reality -- the word was last written by the instruction
-and thread that wrote the byte, not the one that wrote the word.  This
-situation leads to incompleteness because the entry for the word should be
-updated but it is not.
+The \lwt remains correct, assuming the program only accesses non-overlapping
+regions.  In programs that access overlapping regions, there is always some
+entry in the \lwt that correctly reflects each memory location's last writer.
+However, the entry for a coarse-grained region may be obsolete because of an
+access to an overlapping sub-region.
 
-Assuming non-overlapping regions ensures \lwt are correct.  Another
-approach would be to assume a fixed \lwt granularity.  We chose our solution
-for two reasons.  First, fixing the \lwt at a large granularity ({\em i.e.},
-cache-line) precludes sound slicing for fine-grained accesses.  Second, fixing
-the \lwt at a small granularity ({\em i.e.}, byte) requires multiple \lwt
-updates for larger granularity accesses, increasing overheads.
+One approach to mitigating this issue would be to allocate \lwt entries for
+regions of fixed granularity.  We chose not to do so for two reasons.  First,
+associating \lwt entries with regions of  large granularity only ({\em i.e.},
+cache-line) precludes sound analysis for fine-grained accesses.  Second,
+associating \lwt entries with regions of small granularity ({\em i.e.}, byte)
+requires multiple \lwt updates for larger granularity accesses, increasing
+their overheads proportionately to the granularity of the access.
 
 
 
@@ -987,12 +992,12 @@ analysis.
 We illustrate the debugging benefits of last writer slices using three case
 studies.    
 
-\paragraph{Case Study: HTTrack}
+\paragraph{HTTrack}
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
 and the text in Section~\ref{sec:httdebug} describes the benefit provided by
 last writer slices in debugging an ordering violation in HTTrack-3.43.9.  
 
-\paragraph{Case Study: PBZip2}
+\paragraph{PBZip2}
 We conducted a case study using a buggy version of PBZip2-0.9.1.    The bug is
 a use-after-delete bug that leads to an assertion failure.  A worker thread
 tries to acquire a mutex after it has been deleted by the main thread during
@@ -1008,40 +1013,77 @@ because the main thread may have executed arbitrarily far from where it
 deleted the mutex.  With the \lwt, answering that question only requires the
 developer to check the mutex's entry.
 
+\paragraph{MySQL}
 
-\paragraph{Case Study: MySQL}
-Last writer slices were also useful for debugging a logging system failure in
-MySQL-4.0.12.  The bug is an atomicity violation involving two threads.  One
-thread rotates the database's log file.  Log rotation involves closing the log
-file, marking the log closed, opening a new log file, and marking the log open.
-Log rotation should be atomic, but lack of synchronization allows another
-thread to run queries during rotation.  The query code checks if the log is
-marked closed; if it is not closed, the queries are logged, but if it is
-closed, the queries are not logged and the program simply continues.  We added
-an assertion to the non-logging case because this behavior is a security
-vulnerability.  The bug report describes the bug as ``critical'', so it is
-reasonable to assume a programmer that expected all queries to be logged would
-write such an assertion after the bug was reported.
+We used last writer slices to debug an atomicity violation in MySQL-4.0.12.
+Figure~\ref{fig:mysqllws} shows involved code.  Thread 1 rotates the database's
+log file, marking it closed, opening a new log file, then marking it open
+again.  Log rotation should be atomic, but the lack of synchronization allows
+Thread 2 to run its insert during log rotation.  The insert code checks if the
+log is marked closed. If it is insert is not logged, manifesting the failure.
+We added an {\tt abort} statement to the non-logging case because this behavior
+is a security vulnerability that the bug report describes as ``critical''.
+Adding this {\tt abort} is reasonable, as the bug report describes the
+condition in the {\tt else} block as being an error.
 
-We ran the program and concurrently issued a log rotation command, and an
-insert query.  The bug manifested ({\em i.e.}, the queries went unlogged) and
-our assertion failed, dumping core.  Examining the log's last writer slice in
-GDB allowed examining the last thread to mark the log closed.  We discerned it
-was the log rotation thread that last marked the log closed during log
-rotation.  Knowing how the log ended up marked closed enables reasoning about
-what code to change ({\em e.g.}, added synchronization) to prevent the
-situation in the future.
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/MySQLDebug.pdf}
+\caption{\label{fig:mysqllws}{\bf Using last writer slices to debug an
+atomicity violation in MySQL 4.0.12.} The last writer slice reveals the code that closes the log before a database insertion that goes unlogged, which is a security problem.}
+\end{figure}
 
-While a developer is likely to understand the symptom of the bug (queries go
-unlogged) without the information in the \lwt, understanding {\em why} it is marked closed would be
-difficult.  This example illustrates how the \lwt fills in the crucial inter-thread
-dependence that helps understand why the program failed.
-
-
+We triggered the bug by running an insert query during a log rotation.  The bug
+manifested, stopping execution at point {\bf C}.  As described in the bug
+report, the query went unlogged and examining the core dump revealed the log
+was marked closed at point {\bf B}.  However, the core dump did not reveal {\em
+why} the log was marked closed there.  Looking at the last writer slice for the
+{\tt log\_type} variable shows that it was written last Thread 1 at {\bf A}.
+Seeing here that {\tt log\_type} is accessed by multiple threads
+suggests adding synchronization to prevent this atomicity violation.
 
 
 
-\subsection{Setup and Benchmarks}
+\paragraph{JDK-StringBuffer}
+
+Last writer slices help elucidate a subtle atomicity violation in the
+StringBuffer library in version 1.4 of the Java JDK.  We use the C++ port of
+the buggy JDK and a driver program code developed in prior concurrency debugging
+work~\cite{concurrencybugs}.  
+
+
+Figure~\ref{fig:jdklws} shows how the bug can manifest as a failure. The string
+object pointed to by {\tt sb} in Thread 1's code contains a string buffer and a
+variable called {\tt count} that represents its length.  The {\tt append()}
+code should atomically read {\tt sb->count} and update the string's buffer.
+The failure occurs when the {\tt append()} code in Thread 1 is interleaved with
+the {\tt erase()} code in Thread 2 as indicated in the figure.  The {\tt
+erase()} code updates the buffer's length, making the version Thread 1 read
+stale.  Thread 1 uses its stale version in the function called at point {\bf
+B}, causing a crash.  
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/JDKStringBufferDebug.pdf}
+\caption{\label{fig:jdklws}{\bf Using last writer slices to debug an
+ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the interaction between the erase function and the append function that leads to a failure.}
+\end{figure}
+
+When the atomicity violation manifests, the appending thread is updating the
+string's underlying buffer.  The erasing thread, however, may have completed
+its erase operation.  The execution context of the erasing thread at the point
+of the failure provides no insight as to why the program failed.  Examining the memory image, the programmer can only conclude that the length and buffer are 
+inconsistent, but not why they are inconsistent.
+
+This situation illustrates the value of the provenenace information furnished
+by last writer slices.  At the point of the failure the last writer slice for
+the length variable points to a decrement of that variable in the erase
+function.  The last writer slice illustrates the need for synchronization
+between the append function and the erase function.  In the absence of
+provenance information, the programmer would not be aware of that relationship.
+
+
+\subsection{Performance Evaluation: Setup and Benchmarks}
 
 We conducted our evaluation on a machine running Linux 2.6.27-7, with a 2.27GHz
 8-core Xeon E5520 processor with 2-way SMT ({\em i.e.}, 16 execution contexts)
@@ -1109,7 +1151,7 @@ total time to complete 10,000 requests in each thread.
 %\end{table}
 
 
-\subsection{Performance}
+\subsection{Performance Evaluation}
 \label{sec:eval:perf}
 
 The main performance result of our work is that our designs impose performance
