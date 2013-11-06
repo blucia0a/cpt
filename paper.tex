@@ -1006,10 +1006,10 @@ are negligible.  In all but two cases ({\tt vips} \& {\tt swaptions}), the
 overhead of collecting last writer slices is less than 100\%.    
 
 \paragraph{\ctraps}
-\ctraps imposes a geometric mean overhead of 14\% for server applications
-and 110\% for PARSEC applications.  In 7 out of 13 of our tests, the overhead
-of \ctraps is less than 50\%.  These seven low overhead benchmarks include
-all of our server programs, as well as {\tt blackscholes}, {\tt dedup} and {\tt
+\ctraps imposes a geometric mean overhead of 14\% for server applications and
+110\% for PARSEC applications.  In 7 out of 13 of our tests, the overhead of
+\ctraps is less than 50\%.  These seven low overhead benchmarks include all of
+our server programs, as well as {\tt blackscholes}, {\tt dedup} and {\tt
 canneal} from PARSEC.  The overhead for these applications is likely to be
 tolerable in production.  {\tt vips} and {\tt swaptions} saw the highest
 overheads -- around 400\%.  We discuss sources of high overheads in
@@ -1018,25 +1018,14 @@ Sections~\ref{sec:eval:conservative} and~\ref{sec:eval:parsecserver}.
 By comparing \ctraps and last writer slicing, we see four applications ({\tt
 dedup}, {\tt streamcluster}, {\tt fluidanimate}, {\tt ferret}) that have
 \ctraps overhead that is probably too high for always-on use (averaging 153\%)
-drop to a last writer slicing overhead that is probably low enough for always-on use
-(averaging 38\%).  The large decrease indicates these programs perform
-relatively more reads than other applications, and thus benefit more from
-eliminating read instrumentation.
-%\paragraph{\ctrapsmm}
-%\ctrapsmm has very similar overheads to \ctrapsfull in most cases.   The only case
-%with a major difference was {\tt vips}, indicating it executes more redundant
-%reads than the other applications.  The similarity in the two designs'
-%overheads is expected because our default ``no-op'' read instrumentation does
-%not contribute much to overheads in most cases.  Hence, unless \ctrapsmm culls
-%calls with high dynamic frequency, it is unlikely to reduce overheads much.  We
-%show in Section~\ref{sec:appperf} that \ctrapsmm provides more performance
-%benefit when used to implement applications that make read instrumentation sites
-%more costly.
-\\
-\\
+drop to a last writer slicing overhead that is probably low enough for
+always-on use (averaging 38\%).  The large decrease indicates these programs
+perform relatively more reads than other applications, and thus benefit more
+from eliminating read instrumentation.
+
 These high-level results support our main claim that the runtime overhead of
-\ctraps is low enough for deployed systems for many 
-applications, especially for servers.  We now further analyze our observed overheads, illuminating
+\ctraps is low enough for deployed systems for many applications, especially
+for servers.  We now further analyze our observed overheads, illuminating
 differences between the lower-overhead server programs and the higher-overhead
 PARSEC programs.
 
@@ -1048,8 +1037,8 @@ PARSEC programs.
 
 \subsubsection{Overheads Due to Conservative Escape Analysis}
 \label{sec:eval:conservative}
-{\tt swaptions} had the highest overheads in our tests.  We investigated their
-cause and determined they are mostly artificial and due to shortcomings of our
+{\tt swaptions} had the highest run time overhead in our tests.  We
+investigated the cause and determined it is largely due to shortcomings in our
 escape analysis.  We located the inner-loop function {\tt
 HJM\_SimPath\_Forward\_Blocking}.  The function uses two local matrices that
 are allocated through an external call.  Our escape analysis cannot determine
@@ -1057,15 +1046,15 @@ that the call only does allocation and that the matrices are local, so it
 conservatively assumes the matrices escape.  We manually inlined the allocation
 (and a matching deallocation), and escape analysis eliminated their
 instrumentation.  The program's overhead dropped from about 420\% overhead for
-\ctraps to about 300\% overhead; the change for last writer slicing was from 300\% to about
-130\% overhead.  We also looked at an output matrix passed into the inner-loop
-function.  The matrix is allocated and deallocated in the inner-loop's caller,
-but is never shared.  Eliminating instrumentation on accesses to this matrix
-yielded an overhead of about 46\% for \ctraps, and to just 30\% for
-last writer slicing.
+\ctraps to about 300\% overhead; the change for last writer slicing was from
+300\% to about 130\% overhead.  We also looked at an output matrix passed into
+the inner-loop function.  The matrix is allocated and deallocated in the
+inner-loop's caller, but is never shared.  Eliminating instrumentation on
+accesses to this matrix yielded an overhead of about 46\% for \ctraps, and to
+just 30\% for last writer slicing.
 
 Note that both these changes amount to inlining and preserve the semantics and
-sharing pattern of the program.  We expect that more sophisticated escape
+sharing pattern of the program.  We expect a more sophisticated escape
 analysis would find these local accesses and achieve these performance gains
 automatically.
 
@@ -1073,24 +1062,23 @@ automatically.
 \subsubsection{PARSEC vs. Servers}
 \label{sec:eval:parsecserver}
 In our tests, server programs were better able to tolerate the overhead of
-last writer slicing and \ctraps.   We discern three reasons for this difference.
+last writer slices and \ctraps.   We discern three reasons for this difference.
 
 \paragraph{Independent Parallelism}
-In most cases, servers have more independent parallel work.  Server programs
-set up a pool of threads to handle requests.  Each thread incurs some
-instrumentation latency, but that latency is hidden by other threads making
-progress on independent requests.  This analysis also applies to the PARSEC
-applications that had performance similar to the servers.  For instance, {\tt
-blackscholes} uses largely independent threads to compute on different regions
-of a matrix.  In addition, threads performing independent computation ({\em
-i.e.}, non-communicating computation) are likely to operate mostly on
-non-escaping, local data.  Local data are not instrumented by our compiler,
-sparing the overhead.  We characterize the amount of local data in each
-application in detail in Section~\ref{sec:char}.  We show that the server
+In most cases, the servers we evaluated have abundant, completely independent
+parallel work.  Server programs use a pool of threads to handle requests.
+Each thread incurs some instrumentation latency, but that latency is hidden by
+other threads making progress on independent requests.  This analysis also
+applies to the PARSEC applications that had performance similar to the servers.
+For instance, {\tt blackscholes} uses largely independent threads to compute on
+different regions of a matrix.  In addition, threads performing independent
+computation ({\em i.e.}, non-communicating computation) are likely to operate
+mostly on non-escaping, local data.  Local data are not instrumented by our
+compiler, sparing the overhead.  We characterize the amount of local data in
+each application in detail in Section~\ref{sec:char}.  We show that the server
 programs have a larger proportion of provably local accesses than PARSEC.  The
 difference supports the fact that the servers have more independent work ({\em
 i.e.}, more local accesses) than PARSEC. 
-
 
 
 \paragraph{Latency Hiding I/O}
@@ -1099,16 +1087,17 @@ I/O helps hide instrumentation latency.  While I/O is naturally part of many
 applications, we aimed to minimize the effect of I/O in our experiments.  For
 MySQL and Apache, we used local disks for logs and resources, and connected via
 a local socket, rather than using the network.  In spite of these controls, I/O
-remains, and hides latency in our server applications.  LevelDB's benchmark is
-designed to avoid all I/O, creating and manipulating a database entirely in a
-single process.  The absence of I/O may account for some of the difference in
-overhead between LevelDB and the other servers.  Note that the effects of I/O
-are not merely experimental noise -- in real deployed software the latency
-hiding effects of I/O are likely to be even {\em more} pronounced.
+remains, and hides added instrumentation latency in our server applications.
+LevelDB's benchmark is designed to avoid all I/O, creating and manipulating an
+in-memory database in a single process.  The absence of I/O may account for some
+of the difference in overhead between LevelDB and the other servers.  Note that
+the effects of I/O are not merely experimental noise -- in real deployed
+software the latency hiding effects of I/O are likely to be even {\em more}
+pronounced, favoring the use of our system.
 
 
 \paragraph{Interference with Optimization}
-The PARSEC programs are more heavily hand-optimized. In several cases
+The PARSEC programs are heavily hand-optimized. In several cases
 resorting to hand-coded assembly and cache-aware memory access patterns.
 Running instrumentation that accesses the \lwt alongside these computations may
 disrupt their cache performance, or other delicately optimized behavior,
@@ -1119,89 +1108,17 @@ programmers.  As with other code written by experts ({\em e.g.}, lock-free
 data-structures), this code may not require as much {\em in situ} analysis
 support as code written by distributed teams of open source developers or
 novice programmers.  Depending on the maturity and level of verification of a
-piece of carefully hand-optimized code, it might make sense to elide all
-communication tracking instrumentation to preserve performance. 
+piece of carefully hand-optimized code, it might make sense to elide 
+last writer slicing and \ctraps code to preserve performance. 
  
 
-%\subsubsection{Breaking Down the Design Space}
-%Figure~\ref{fig:perfall} also shows the impact of context-sensitivity, lossy
-%optimization, and sampling on our overheads.  
-%
-%\paragraph{Context Sensitivity}
-%Context-sensitivity imposes a substantial overhead in some cases.  The
-%additional cost of context-sensitivity is about 10\% of the total overhead for
-%PARSEC.  For server applications, the cost is less substantial, but still a
-%non-negligible 4\% over the baseline.  The cost of context-sensitivity comes
-%from the need to compute and store multiple addresses, rather than a single
-%program counter.  
-%
-%In the context insensitive case, updating the \lwt requires a single register
-%read ({\em rip}) a bitwise {\tt or} to combine the thread identifier and the
-%instruction pointer, and the actual write to update the \lwt entry.  In the
-%context sensitive case, updating the \lwt requires looking back over the call
-%stack, and a bitwise {\tt or} operation at each return address.  The cost is at
-%least a multiple of the cost of the constext insensitive case.  However, to
-%restrict overhead to write instrumentation calls, we walk stack frames, rather
-%than iteratively computing call stacks at each call and return.  As a result,
-%the cost is amplified by the need to walk the stack to find return addresses.
-%Future work could reduce this cost using Breadcrumbs~\cite{breadcrumbs} or
-%Probabilistic Calling Contexts~\cite{probcallcont}. \addtodo{Use the Aviso
-%iterative context tracker -- maybe it's actually faster?}
-
-%\paragraph{Redundant Read Optimization}
-%
-%Our static analysis to remove read instrumentation reduces performance
-%overheads for PARSEC programs, but does not provide much benefit in server
-%programs.  In particular, removing redundant read instrumentation benefits {\tt
-%x264} and {\tt swaptions}.  In the case of {\tt swaptions}, the gains are due
-%to a \addtodo{Read Swaptions Code -- where's the beef?}.  In the case of {\tt
-%x264}, the improvement is due to \addtodo{What is it?}.
-%
-%Note that the experiments depticted in Figure~\ref{fig:perfall} reflect our
-%runtime in its base configuration -- writes update the \lwt, and reads only
-%call a {\em no-op} hook.  Our base configuration targets manual debugging,
-%which does not require actions on reads.  In more sophisticated applications of
-%\ctraps, such as communication graph collection, action is required on reads.
-%In Section~\ref{sec:graphperf}, we show that this optimization more
-%substantially improves performance when read instrumentation sites do more
-%work.
-%
-%\paragraph{Sampling}
-%Sampling reduces overheads for both server and PARSEC applications.
-%\addtodo{Explain why sampling is awesome sometimes and less awesome other
-%times}
-
-
-%\paragraph{Annotating Away Instrumentation}
-%\addtodo{Discuss the /*Sequential*/ region in streamcluster and how not instrumenting those loads and stores might increase perf a lot}
-
-
-%blackscholes 2 4
-%canneal 124 226
-%dedup 1 171
-%ferret 40 792
-%fluidanimate 3 149
-%streamcluster 22 47
-%swaptions 2 19
-%vips 1919 9116
-%x264 2987 5960
-
-%blackscholes 3.77358490566038 7.54716981132075
-%canneal 15.7360406091371 28.6802030456853
-%dedup 0.128865979381443 22.0360824742268
-%ferret 1.0584810796507 20.9314633500926
-%fluidanimate 0.398406374501992 19.6547144754316
-%streamcluster 5.44554455445545 11.6336633663366
-%swaptions 0.87719298245614 8.33333333333333
-
 \subsection{Context-Sensitivity}
+{\bf TODO: Was this LWS or CTRAPS-NOOP or what?}
 We briefly evaluated the cost of context-sensitivity for \ctraps.  With a
 bounded 2-address context, the average overhead for server programs was 18\%
 and the average overhead for PARSEC was 145\%.  These data show that a
 restricted form of context-sensitive analysis is possible in \ctraps with
-overheads low enough for production.  This possibility broadens the scope of
-applicability for \ctraps.  We omit a full analysis of these results here due
-to space constraints.
+overheads low enough for production.  
 
 
 \subsection{Evaluating CTraps Applications}
@@ -1210,8 +1127,7 @@ We evaluated our CCI-Prev and communication graph collection CTraps
 applications.  Our results show that these CTraps applications have modest
 overheads that scale with their analysis complexity.  In several cases -- most
 notably, in tests with our server benchmarks -- their overhead is low enough
-for production use.  We also show that our redundancy analysis saves some
-performance overhead in some cases.
+for production use.  
 
 \subsubsection{Performance with \ctraps}
 Figure~\ref{fig:perfapps} shows the performance overheads of our implementation
@@ -1274,16 +1190,9 @@ important target than PARSEC for these types of analyses in production.
 
 \subsection{Characterizing \ctraps}
 \label{sec:char}
-We characterized the instrumentation pruned by escape and redundancy analysis.
-We report our results in Table~\ref{tab:char}.  Each column shows the percent
-of instrumentation sites pruned and the absolute number of sites in
-parenthesis.  The first column shows the amount of static instrumentation
-pruned by escape analysis.  The second column shows the amount of static
-instrumentation pruned by our redundancy analysis.  The third column shows how
-many dynamic instances of instrumentation were eliminated by redundancy analysis.  To
-collect the data in the third column, we implemented a special instrumentation
-pass that marked pruned functions statically so they could be counted
-separately from non-pruned functions at runtime.
+We characterized the instrumentation pruned by escape analysis.  We report our
+results in Table~\ref{tab:char}.  The table shows the percent of
+instrumentation sites pruned and the absolute number of sites in parenthesis.
 
 \begin{table}
 %\renewcommand{\tabcolsep}{2pt}
@@ -1319,15 +1228,6 @@ larger proportion of accesses were able to be proved local (21\% -- 66\%).  The
 difference is likely due to the fact that server threads perform more
 independent work (as discussed in Section~\ref{sec:eval:parsecserver}).  Eliminating
 instrumentation using escape analysis is key to high performance.  
-
-The data also show that fewer accesses were eliminated by redundancy analysis
-than by escape analysis.  In some cases ({\em e.g.}, {\tt swaptions}), the
-fraction of static and dynamic instrumentation sites eliminated is small.  In
-these cases, the few pruned calls were infrequently executed and as
-Figure~\ref{fig:perfapps} shows, there was little reduction in overhead.  In
-other cases, like {\tt x264}, the fraction of calls pruned was substantial 
-and yielded the largest performance boost.
-
 
 
 
