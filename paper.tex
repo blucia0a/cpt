@@ -780,7 +780,7 @@ record/replay~\cite{chimera,fdr}.  \ctraps is an enabling platform for
 developing these or other analyses with low baseline overheads and without the
 need to build an entire concurrency analysis from scratch.
 
-\section{System Implementation and Applications}
+\section{System Implementation}
 
 We implemented last writer slicing and \ctraps.  We built our compiler support
 as a plugin for GCC ({\tt gcc-4.7.0 20111112}).  We used GCC's points-to and
@@ -806,9 +806,11 @@ faster and simpler than a chaining concurrent hash table implementation.
 Collisions are extremely rare, so this simplification is unlikely to be a
 problem even in a more industrial strength implementation.  
 
-We released our implementation, free and open-sourced~\cite{ctrapsonweb}, on
-the web and have had contributions to our codebase from members of the GCC
-development community.
+\subsection{Release}
+We released our implementation, free and open-sourced, on the
+web~\cite{withheldforanonymity} and published it to the GCC plugin repository.
+Since its release, we have seen contributions to our codebase from members of
+the GCC development community and downloads from interested developers.
 
 \section{Evaluation}
 \label{sec:eval}
@@ -962,30 +964,6 @@ simultaneously from 8 threads.  We measured Memcached's performance to be the
 total time to complete 10,000 requests in each thread.
 
 
-%\begin{table}
-%\begin{tabular}{ l | l | c | l }
-%& & & \\ \hline
-%\multirow{9}{*}{\begin{sideways}PARSEC\end{sideways}} & blackscholes & & \\
-%&dedup & & \\
-%&canneal & & \\
-%&x264& & \\
-%&vips& & \\
-%&ferret& & \\
-%&fluidanimate& & \\
-%&swaptions & & \\
-%&streamcluster & & \\ \hline
-%\multirow{4}{*}{\begin{sideways}Servers\end{sideways}}&MySQL & & \\
-%&Apache & & \\
-%&LevelDB & & \\
-%&Memcached & & \\ \hline
-%\multirow{3}{*}{\begin{sideways}App\end{sideways}}&PBZip2 & & \\
-%&AGet & & \\
-%&Transmission & & \\
-%
-%\end{tabular}
-%\caption{\label{tab:benchmarks}\addtodo{build this table, show LOC, \#threads, sharing pattern(?), etc}}
-%\end{table}
-
 
 \subsection{Performance Evaluation}
 \label{sec:eval:perf}
@@ -995,15 +973,17 @@ overheads that are low enough for use in deployed systems for many of our
 experimental workloads.  Figure~\ref{fig:perfall} shows the slowdown suffered
 by our benchmarks due to last writer slicing and \ctraps running with ``no-op''
 trap hooks ({\em i.e.}, no handlers), relative to the natively executing
-baseline.  These data reflect our main performance findings.    
+baseline.  In these experiments, we consider a run time overhead of 10\% or
+less to be ideal for production use and a run time overhead of 50\% as
+a reasonable upper bound on acceptable overhead for production use.
 
 \paragraph{Last Writer Slices}
 The data show that last writer slicing has very low overheads with a geometric
 mean of less than 10\% across our server programs and less than 50\% across
-PARSEC.  Such low overheads are very likely to be tolerable in deployed
-systems.  In many cases (Apache, MySQL, {\tt dedup}, {\tt canneal}), overheads
-are negligible.  In all but two cases ({\tt vips} \& {\tt swaptions}), the
-overhead of collecting last writer slices is less than 100\%.    
+PARSEC.  Such low overheads are likely to be acceptable in production.  In many
+cases (Apache, MySQL, {\tt dedup}, {\tt canneal}), overheads are negligible.
+In all but two cases ({\tt vips} \& {\tt swaptions}), the overhead of
+collecting last writer slices is less than 100\%.    
 
 \paragraph{\ctraps}
 \ctraps imposes a geometric mean overhead of 14\% for server applications and
@@ -1017,11 +997,11 @@ Sections~\ref{sec:eval:conservative} and~\ref{sec:eval:parsecserver}.
 
 By comparing \ctraps and last writer slicing, we see four applications ({\tt
 dedup}, {\tt streamcluster}, {\tt fluidanimate}, {\tt ferret}) that have
-\ctraps overhead that is probably too high for always-on use (averaging 153\%)
-drop to a last writer slicing overhead that is probably low enough for
-always-on use (averaging 38\%).  The large decrease indicates these programs
-perform relatively more reads than other applications, and thus benefit more
-from eliminating read instrumentation.
+\ctraps overhead that is probably too high for production use (averaging
+153\%).  By comparison, those applications have a last writer slicing overhead
+that is likely acceptable for production use (averaging 38\%).  The difference
+indicates that these programs perform relatively more reads than other
+applications, experiencing more overhead due to \ctraps's read instrumentation.
 
 These high-level results support our main claim that the runtime overhead of
 \ctraps is low enough for deployed systems for many applications, especially
@@ -1042,21 +1022,22 @@ investigated the cause and determined it is largely due to shortcomings in our
 escape analysis.  We located the inner-loop function {\tt
 HJM\_SimPath\_Forward\_Blocking}.  The function uses two local matrices that
 are allocated through an external call.  Our escape analysis cannot determine
-that the call only does allocation and that the matrices are local, so it
-conservatively assumes the matrices escape.  We manually inlined the allocation
-(and a matching deallocation), and escape analysis eliminated their
+that the matrices are only used locally in that function, so it conservatively
+assumes the matrices escape.  We manually inlined the matrix allocation calls
+(and a matching deallocation calls), and escape analysis eliminated their
 instrumentation.  The program's overhead dropped from about 420\% overhead for
 \ctraps to about 300\% overhead; the change for last writer slicing was from
 300\% to about 130\% overhead.  We also looked at an output matrix passed into
 the inner-loop function.  The matrix is allocated and deallocated in the
 inner-loop's caller, but is never shared.  Eliminating instrumentation on
 accesses to this matrix yielded an overhead of about 46\% for \ctraps, and to
-just 30\% for last writer slicing.
+just 30\% for last writer slicing.  
 
-Note that both these changes amount to inlining and preserve the semantics and
-sharing pattern of the program.  We expect a more sophisticated escape
-analysis would find these local accesses and achieve these performance gains
-automatically.
+These manual improvements to the escape analysis reduced the run time overheads
+for these workloads from being unacceptable for any production environment to
+being reasonable for use in production systems.  We expect a more sophisticated
+escape analysis would find these local accesses and achieve these performance
+gains automatically.
 
 
 \subsubsection{PARSEC vs. Servers}
@@ -1130,12 +1111,15 @@ notably, in tests with our server benchmarks -- their overhead is low enough
 for production use.  
 
 \subsubsection{Performance with \ctraps}
-Figure~\ref{fig:perfapps} shows the performance overheads of our implementation
-as the slowdown with respect to the natively executing baseline.  The overheads
-vary substantially across applications.  On average, the overheads are higher
-than for our baseline implementation (Section~\ref{sec:eval:perf}).  
 
-In six cases (all servers, {\tt blackscholes}, and {\tt dedup}), the overheads
+ Figure~\ref{fig:perfapps} shows the performance overheads of
+our implementation as the slowdown with respect to the natively executing
+baseline.  The overheads vary substantially across applications and the average
+run time overheads are higher than for our baseline implementation
+(Section~\ref{sec:eval:perf}). 
+  
+
+In six cases (the four servers, {\tt blackscholes}, and {\tt dedup}), the overheads
 for CCI-Prev implementations are tolerable for deployment use (around 50\%).
 This result supports our claim that \ctraps helps build useful analyses that
 have overheads low enough for deployment for an important class of
@@ -1167,6 +1151,7 @@ applications are batch focused and compute-intensive; we expect the
 long-running, event-driven nature of server applications makes them a more
 important target than PARSEC for these types of analyses in production.  
 
+{\bf TODO: Compare with these analyses implemented using binary instrumentation}
 
 
 %In two of these cases, {\tt
@@ -1195,7 +1180,6 @@ results in Table~\ref{tab:char}.  The table shows the percent of
 instrumentation sites pruned and the absolute number of sites in parenthesis.
 
 \begin{table}
-%\renewcommand{\tabcolsep}{2pt}
 \centering
 \small
 \begin{tabular}{l | r r }
@@ -1226,31 +1210,56 @@ operations are local and do not require instrumentation.  Across PARSEC,
 between 8\% and 30\% of accesses were proved local.  In the server programs, a
 larger proportion of accesses were able to be proved local (21\% -- 66\%).  The
 difference is likely due to the fact that server threads perform more
-independent work (as discussed in Section~\ref{sec:eval:parsecserver}).  Eliminating
-instrumentation using escape analysis is key to high performance.  
+independent work (as discussed in Section~\ref{sec:eval:parsecserver}).
+Eliminating instrumentation using escape analysis is key to high performance.  
 
+{\bf TODO: Run without escape analysis?}
 
 
 \section{Related Work}
 
-There are several categories of prior work related to last writer slices and \ctraps.  
+There are several categories of prior work related to last writer slices and
+\ctraps.  
 
 \paragraph{Program Slicing}
-Slicing techniques~\cite{tipslicingsurvey} are techniques for
-identifying useful subsequences of a program's instructions.   Slicing can work
-by analyzing program code statically or analyzing execution traces dynamically.
-Many slicing techniques discussed in ~\cite{tipslicingsurvey} monitor control and
-data dependences to identify which parts of a program might be relevant to a
-task ({\em e.g., debugging}).
+Slicing techniques~\cite{tipslicingsurvey} are techniques for identifying
+useful subsequences of a program's instructions.   Slicing can work by
+analyzing program code statically or analyzing execution traces dynamically.
+Many slicing techniques discussed in ~\cite{tipslicingsurvey} monitor control
+and data dependences to identify which parts of a program might be relevant to
+a task ({\em e.g., debugging}).
 
-Thin Slicing~\cite{thinslicing} is related in its approach. Thin
+
+Thin Slicing~\cite{thinslicing} is especially related to this work. Thin
 Slicing monitors and reports a select subset of dependent operations from an
-execution.  The goal is to eliminate some operations that would be included in a traditional
-slice to make the slice simpler and less costly to collect.  While this work and
-Thin Slicing differ in what they collect and how, our motivation to monitor a
-select subset of dependences was similar to theirs.    Prior work
-on slicing is unlike our work in that little has focused on monitoring
-inter-thread dependences in production code without sampling or hardware support.
+execution.  The goal is to eliminate some operations that would be included in
+a traditional slice to make the slice simpler and less costly to collect.
+While this work and Thin Slicing differ in what they collect and how, our
+motivation to monitor a select subset of dependences was similar to theirs.  
+
+
+%is unlike our work in that our work focused on
+%monitoring inter-thread dependences in production code without sampling or
+%hardware support.
+
+\paragraph{Debugging with Data Provenance Information}
+
+Prior work has looked at using data provenance information in
+debugging~\cite{whylineicse, whylinechi}.  The WhyLine debugger allowed
+programmers to ask questions about why particular variables held particular
+values during debugging.  WhyLine answered those questions by presenting data-
+and control-flows that influenced those variables.  WhyLine showed that
+provenance information is intuitive to programmers and makes debugging easier,
+justifying our focus on provenance information in our last writer slicing
+design.
+
+There are several characteristics of this work that distinguish it from prior
+work on debugging with data provenance information.  Unlike prior work, our
+work focuses on isolating a limited subset of dependence information that we
+can collect with run time overheads low enough for production use.
+Furthermore, we focus on {\em concurrent} program debugging.  Prior work on
+provenance debugging that focused mainly on single threaded programs and had
+dependence slicing overheads are probably too high for production.
 
 \paragraph{Communication Tracking in Concurrent Programs}
 Several techniques have been proposed do some form of dependence and
@@ -1258,50 +1267,57 @@ communication tracking to analyze concurrent programs.
 
 CCI~\cite{cci}, Bugaboo~\cite{bugaboo}, Recon~\cite{recon}, and
 DefUse~\cite{defuse} all explicitly track inter-thread memory dependences at
-runtime.  Unlike our work, these techniques were not designed to run in
-production systems~\cite{recon,defuse} without sampling~\cite{cci} or hardware
-support~\cite{bugaboo}.  
+runtime.  Unlike our work, several of these techniques were not designed to run
+in production systems~\cite{recon,defuse}.  A distinguishing characteristic of
+our work is that it is effective and fast enough for production without the
+need to aggregate information from multiple different sampled executions, like
+CCI~\cite{cci}.  Additionally, our system does not require invasive hardware
+changes like Bugaboo~\cite{bugaboo} or LBA~\cite{paralog}.
 
-Some other techniques~\cite{threadclustering,threadcriticality} have relied on
-hardware debugging registers to monitor dependences efficiently enough for
-production use.  These techniques are similar to our work in that they track how
-threads interact ({\em i.e.}, share).  These techniques are different in that
-their approach to dependence tracking is specific to the problem they address;
-our system provides general support.
+Other techniques~\cite{threadclustering,threadcriticality} use  hardware debug
+registers to monitor dependences efficiently enough for production use.  These
+techniques are similar to our work in that they track how threads interact.
+These techniques are different from our work in that they track information
+specific to the performance and our system provides general support.
 
 \paragraph{Extensible Program Instrumentation}
 There are many systems for building analyses using extensible program
 instrumentation.  Binary instrumentation
 systems~\cite{pin,dynamorio,valgrind,roadrunner} provide completely general
 support to instrument arbitrary code -- instrumenting a program to track
-communciation is possible in such systems.  These systems are similar to
-\ctraps in that they aim to enable dynamic analyses and runtime systems.  These
-are different from \ctraps because they rely on dynamic rewriting, yielding
-overheads too high for deployment.  \ctraps provides extensible support for a
-restricted set of instrumentation tasks ({\em i.e.}, tracking communication)
-with overheads low enough for production.  Such general systems also increase
-the burden on implementors: to monitor communication, they must manually track
-dependences, crafting delicate, performance sensitive code.  \ctraps tracks
-only those dependences corresponding to communcation.  Furthermore, 
-instrumentation systems lack the debugging benefits afforded by last writer slices.
+communciation is possible in such systems.  
+
+These systems are similar to our work in that they aim to enable dynamic
+analyses and runtime systems.  They are different from our work because they
+rely on dynamic rewriting, yielding overheads often too high for deployment.
+Instead, we trade generality for performance. Last writer slices and \ctraps
+provide extensible support in the restricted domain of tracking communication
+with overheads low enough for production.  Another difference is that our work
+handles some of the delicate, performance sensitive code required to track
+communication.  In general instrumentation systems, programmers write that code
+from scratch at their own risk.  
 
 \section{Conclusions}
-This work stems from the observation that monitoring inter-thread communication
-is often fast enough for use in deployed systems.  Based on this premise, we
-develop system support for efficiently collecting last writer slices.  Using
-that support, we developed \ctraps, a system for extensibly tracking
-communicating inter-thread dependences.  \ctraps works efficiently at runtime,
-in production, and without sampling or hardware support.  We showed that
-\ctraps exposes a sound and complete (assuming race freedom) communication
-tracking interface, enabling trap handlers to implement applications in just a
-few lines of code.  We showed that a useful class of analyses can be
-implemented using \ctraps that are efficient enough for deployment use in an
-important set of programs ({\em e.g.}, servers, key-value stores, databases,
-{\em etc.}).  We showed that last writer slices provide information that is
-helpful for understanding concurrency errors with nearly no overhead.  Our
-future work includes studying the generality of possible \ctraps applications
-and the role of minimal hardware support for \ctraps.  We will also further study the
-impact of provenance information on debugging in both sequential and concurrent
+This work stems observes that we can collect a useful form of data provenance
+information with overheads low enough for use in deployed systems. 
+
+We developed system support that collects last writer slices with overheads
+well within an acceptable range for production.  We showed that, during
+debugging, the provenance information provided by last writer slices reveals
+crucial connections between different threads' otherwise disparate regions of
+code.  Understanding how code in different threads interacts is essential to
+concurrency debugging and this work helps with that understanding.
+
+Using last writer slices, we then built \ctraps, an extensible framework for
+implementing concurrent program analyses that interpose on inter-thread
+communication.  Trap handlers implement such analyses in just a few lines of
+code.  We showed that it is possible to build useful analyses using \ctraps
+that are efficient enough for deployment use in an important set of programs
+({\em e.g.}, servers, key-value stores, databases, {\em etc.}).  
+
+An interesting direction for future work is to evaluate the role of minimal
+hardware support for \ctraps.  We will also further study the impact of
+provenance information on debugging in both sequential and concurrent
 applications. 
 
 
