@@ -611,15 +611,14 @@ their overheads proportionately to the granularity of the access.
 \section{Communication Traps}
 \label{sec:ctraps}
 
-\ctraps is a platform for analyzing and interposing on inter-thread
-communication events during a concurrent program's execution.  We build our
-support for \ctraps on top of the support for last writer slicing that we
-described in Section~\ref{sec:lastwriterslices}.  Using last writer slice
-information, \ctraps dynamically tracks dependences representing inter-thread
-communication events. \ctraps exposes communication events as {\em traps}
-during an execution that {\em trap handlers} can handle to perform analysis
-and interposition.  We formalize trap delivery and handling in
-Section~\ref{sec:ctsoundness}.
+\ctraps is a framework for analyzing and interposing on inter-thread
+communication events during a program's execution.  We build \ctraps on top of
+last writer slicing that we described in Section~\ref{sec:lastwriterslices}.
+Using last writer slice information, \ctraps dynamically tracks 
+inter-thread communication events. \ctraps exposes communication
+events as {\em traps} during an execution that {\em trap handlers} can handle
+to perform analysis and interposition.  We formalize trap delivery and handling
+in Section~\ref{sec:ctsoundness}.
 
 \subsection{\ctraps Design}
 
@@ -649,34 +648,37 @@ Together, the \ctraps executable and the \ctraps handlers are deployed.
 %our \ctraps system support also monitors all read and write operations that
 %might communicate and traps on all those that communicate.  
 
-\subsubsection{\ctraps System Support} 
+\subsubsection{Compiler and Runtime Support} 
 
-Our base \ctraps design delivers traps on all communicating read and write
-operations using compiler and runtime support. 
+\ctraps delivers software traps before all read and write operations executed
+by one thread that access a memory location that was last written by another
+thread, {\em i.e.}, communicating memory operations.  Traps are simply function
+calls made before such operations execution.  \ctraps implements traps using a
+combination of compiler and runtime library support.
 
 \paragraph{Compiler Support}
-Our compiler instruments all read and write operations that access potentially
-escaping memory locations with a call to a {\em trap hook} function.  Trap hooks
-are passed the address of the memory word involved in the access, the thread
-identifier of the accessing thread, the type of operation being performed, and
-the program point of the access.  
+Our compiler inserts a call to the \ctraps {\em trap hook} function immediately
+before all read and write operations that access potentially escaping memory
+locations.  Trap hooks are passed the address of the memory location being
+accessed, the thread identifier of the accessing thread, the type of operation
+being performed, and the program point of the access.  
 
 \paragraph{Runtime Support}
-The \ctraps runtime implements the trap hook function.  Trap hooks have two
-purposes: first, to detect communication; second, to deliver traps to \ctraps
-applications.  Trap hooks detect communication by looking up the \lwt entry for
-the memory location being accessed.  If the thread identifier in the \lwt entry is
-different from the accessing thread, then the access is a {\em communicating
-memory access}.  At each communicating memory access, the runtime delivers a
-trap to the accessing thread just before the memory access is allowed to
-proceed.  Traps are delivered by trap hooks to {\em trap handler routines} that
-implement \ctraps applications.  Trap handler routines are like signal
-handlers.  They are registered with the \ctraps runtime when the program
-starts.  Trap handlers may contain arbitrary application-specific code.
-Figure~\ref{fig:hookapi} shows the \ctraps trap handling API.  Trap
-handlers are passed the four pieces of information passed to the trap hook, as
-well as the \lwt's record of the program point and thread identifier of the
-last write to the involved memory location.
+The \ctraps runtime implements the trap hook function,  which has two purposes.
+The trap hook function detects communication and delivers traps to \ctraps
+applications when communication occurs.  The trap hook function detects
+communication by looking up the \lwt entry for the memory location being
+accessed.  If the thread identifier in the \lwt entry is different from the
+accessing thread, then the trap hook function delivers a trap to the accessing
+thread, just before the memory access is allowed to proceed.  To deliver a
+trap, the trap hook function calls {\em trap handler routines} that are defined
+in \ctraps applications.  Trap handler routines are like signal handlers.  They
+are registered with the \ctraps runtime when the program starts.  Trap handlers
+may contain arbitrary application-specific code.  Figure~\ref{fig:hookapi}
+shows the \ctraps trap handling API.  Trap handlers are passed the four pieces
+of information passed to the trap hook, as well as the \lwt's record of the
+program point and thread identifier of the last write to the involved memory
+location.
 
 \begin{figure}[htb]
 \centering
@@ -695,32 +697,31 @@ building on our last writer slicing formalism from
 Section~\ref{sec:lastwriterslices}.  
 
 Given a program $P'$ already instrumented with \lwt updates, the \ctraps
-compiler produces $P''$. A thread $i$ in $P''$ executes a modified instruction
-sequence, $P''_{i} = \{ T(p^{i}_{j}), I(p^{i}_{1}), p^{i}_{1},$ $\ldots,
-T(p^{i}_{j}), I(p^{i}_{k_{i}}), p^{i}_{k_{i}} \}$, where $T(p^{i}_{j})$ is a
+compiler produces $P''$. A thread $t$ in $P''$ executes a modified instruction
+sequence, $P''_{t} = \{ T(p^{t}_{j}), I(p^{t}_{1}), p^{t}_{1},$ $\ldots,
+T(p^{t}_{j}), I(p^{t}_{k_{t}}), p^{t}_{k_{t}} \}$, where $T(p^{t}_{j})$ is a
 trap hook call.  We consider a point $Q = \{q_1, \ldots, q_{e-2}\}$ after $e-2$
-instructions of a sequentially consistent execution have executed and $q_{e} =
-p^{i}_{j}$ is about to execute after its trap hook $T(p^{i}_{j})$ and \lwt
-update $I(p^{i}_{j})$ execute.  The trap hook $T(p^{i}_{j})$ {\em delivers} a
-trap before if $LWT[m] = (t,p^{t}_{\ell w})$ and $i \ne t$.  Informally, the
-trap hook delivers a trap before the instruction if the thread that last wrote
-$m$ is different from the one executing the instruction.  When a trap hook,
-$T(p^{t}_{j})$, delivers a trap, thread $t$ executes an arbitrary trap handler
-$H = \{h^{t}_{1}, \ldots, h^{t}_{h_{n}}\}$.  Thus, after the trap, the \lwt
-update (if $p^{i}_{j} = Write(m)$), and the instruction execute, the execution
-reaches the new point $Q = (q_{1}, \ldots, T(q_{e}), h^{t}_{1}, \ldots,
-h^{t}_{h_{n}}, I(q_{e}), q_{e})$, and continues.
+instructions of an execution have executed and $q_{e} = p^{t}_{j}$ is about to
+execute after its trap hook $T(p^{t}_{j})$ and \lwt update $I(p^{t}_{j})$
+execute.  The trap hook $T(p^{t}_{j})$ {\em delivers} a trap before if $LWT[m]
+= (t',p^{t'}_{\ell w})$ and $t \ne t'$.  Informally, the trap hook delivers a
+trap before the instruction if the thread that last wrote $m$ is different from
+the one executing the instruction.  When a trap hook, $T(p^{t}_{j})$, delivers
+a trap, thread $t$ executes an arbitrary trap handler $H = \{h^{t}_{1}, \ldots,
+h^{t}_{h_{n}}\}$.  Thus, after the trap, the \lwt update, and the instruction
+execute, the execution reaches the new point $Q = (q_{1}, \ldots, T(q_{e}),
+h^{t}_{1}, \ldots, h^{t}_{h_{n}}, I(q_{e}), q_{e})$, and continues.
 
-We define what makes a \ctraps design sound and complete, and then discuss the
-correctness of our design.  A design is {\em sound} if it only delivers a trap
-when threads have communicated.  A design is {\em complete} if it always
-delivers a trap when threads have communicated.  The \ctraps compiler puts a
-trap hook on all read and write operations, and only on those operations.
-Assuming a correct \lwt, \ctraps is correct.  The correctness of \ctraps also
-relies on data-race freedom and non-overlapping memory references.  The same
-arguments for \lwt correctness apply to the correctness of trap delivery and
-handling.  Most importantly, data-race freedom implies that trap hooks, \lwt
-updates, and accesses are all atomic.
+A \ctraps implementation must be sound and complete to be correct.  A design is
+{\em sound} if it only delivers a trap when threads have communicated.  A
+design is {\em complete} if it always delivers a trap when threads have
+communicated.  The \ctraps compiler puts a trap hook on all read and write
+operations, and only on those operations.  Assuming a correct \lwt, \ctraps is
+correct.  Our \ctraps implementation also does not insert any synchronization
+into the program, so it comes with the same caveats related to data-race
+freedom as the \lwt.  The same arguments for \lwt correctness apply to the
+correctness of trap delivery and handling.  Most importantly, data-race freedom
+implies that trap hooks, \lwt updates, and accesses are all atomic.
 
 
 %\paragraph{Escape Analysis}
@@ -732,36 +733,38 @@ updates, and accesses are all atomic.
 
 \subsection{\ctraps Applications}
 \label{sec:apps}
-\ctraps applications are implemented as shared object plugins ({\em i.e.}, {\tt
-.so} files on Linux) that are loaded by our runtime.  They must implement the
-\ctraps handler API, which requires a trap handler function and permits a
-constructor, destructor,  thread constructor,  thread destructor, which allow
-initialization and disposal of global and thread-local state.  A wide variety
-of \ctraps applications are possible.  Several such applications were outlined
-in Section~\ref{sec:background:comm}.    We implemented two applications, a
-version of a debugging analysis from prior work~\cite{cci} and communication
-graph collection, similar to that in DefUse~\cite{defuse}, Recon~\cite{recon},
-and DMTracker~\cite{dmtracker}.
+\ctraps applications are implemented as shared library plugins that are loaded
+by our runtime.  They must implement the \ctraps trap handler API, which
+requires a trap handler function and permits a constructor, destructor, thread
+constructor, and thread destructor, which allow initialization and disposal of
+global and thread-local state.  Many useful \ctraps applications are possible,
+several of which were outlined in Section~\ref{sec:background:comm}.    To
+demonstrate that \ctraps can implement real analyses with little work, we
+implemented two applications. The first application is a version of a debugging
+analysis from CCI~\cite{cci}.  The second application is a communication graph
+collector, similar to DefUse~\cite{defuse}, Recon~\cite{recon}, and
+DMTracker~\cite{dmtracker}.
 
 \paragraph{CCI-Prev Implementation}
-CCI-Prev is a technique from CCI~\cite{cci} that computes a set of code points
+CCI-Prev is a technique from CCI~\cite{cci} that records a set of code points
 that access a memory location when the previous access to the same location was
-by a different thread.  We implemented a variant of CCI-Prev using \ctraps.  On
-communcating read operations, the runtime updates the LWT like it normally does
-on writes.  Under this policy, any operation that accesses a location that the
-LWT indicates was last accessed by a different thread is recorded.  The set of
-recorded accesses is the output of the analysis.  Our \ctraps implementation of
-CCI-Prev took about 10 lines of code (on top of our base system). 
+by a different thread.  We implemented a variant of CCI-Prev using \ctraps that
+records such a set of code points.  In our implementation, communcating read
+operations update the LWT like writes normally do.  Under this policy, any
+operation that accesses a location that was last accessed by a different thread
+is recorded.  The set of recorded accesses is the output of the analysis.  Our
+\ctraps implementation of CCI-Prev took about 10 lines of code (on top of our
+base system). 
 
 \paragraph{Communication Graph Implementation}
-Communication graphs are fundamental to several prior debugging
-techniques~\cite{recon, bugaboo, defuse}.  We implement simple communication
-graph collection using \ctraps.  When a trap is delivered, our implementation records
+Communication graphs are the basis of several prior debugging
+techniques~\cite{recon, bugaboo, defuse}.  We implement communication graph
+collection using \ctraps.  When a trap is delivered, our implementation records
 communication graph edges composed of the code point of the last writer to the
 location being accessed and the code point of the trapping access.  The set of
-recorded graph edges is the communication graph that we output.  Our \ctraps
-implementation of communication graphs took about 50 lines of code (including
-output formatting code). 
+recorded edges is the tool's output.  Our \ctraps implementation of
+communication graphs took about 50 lines of code (including output formatting
+code). 
 
 \paragraph{Other Applications}
 In addition to those applications, we envision that a variety of applications
@@ -771,226 +774,58 @@ others are a natural fit for \ctraps.  \ctraps provides the support necessary
 for implementing specification checkers for specifications related to
 inter-thread communication~\cite{velodrome,oshajava}.  Guided testing
 tools~\cite{cuzz,chess} and bug detection tools~\cite{ctrigger} focused on
-concurrency could also easily implemented as \ctraps applications.  \ctraps
-also provides an interesting platform for developing new approaches to
-record/replay~\cite{chimera,fdr}.  We expect these and other
-applications will become more prevalent with the adoption of \ctraps'
-low-overhead, deployable support for communication tracking.
-
-Additionally, \ctraps affords the ability for {\em users} of systems to add
-functionality to or extend systems.  This facet seems especially promising for
-monitoring or enforcing installation-specific security or performance policies
-without the need to modify applications.  While interesting, we relegate such
-user-built applications to future work.
-
-%Our redundancy analysis applies only to instrumentation on loads,
-%not stores.  Eliminating instrumentation on stores may lead to stale
-%information in the \lwt, which could lead to spurious traps.  Eliminating
-%reads, on the other hand, can only lead to overlooked communication events,
-%never false traps.
-
-
-%\subsection{Design 3: \lws}
-%
-%Our final design, \lws, varies the compiler support used by \ctrapsfull and
-%\ctrapsmm to simply eliminate instrumentation on all read operations.  With no
-%instrumentation on read operations, \lws has the lowest runtime overhead, but
-%the most imprecise.  However, despite not collecting information about reads,
-%\lws precisely collects last writer slices: all writes are instrumented, so the
-%\lwt is a sound, complete reflection of program state.  
-
-
-
-
-%\section{Design Justification}
-
-
-%We designed \ctraps to satisfy two design goals.
-%
-%First, our design must be efficient enough to run in useful deployment
-%environments without hardware support or sampling.  Second, our design must
-%collect enough information at run time to be useful for debugging and to
-%facilitate building applications.  
-%
-%The constraints conflict because deployment use requires minimizing
-%instrumentation overheads, but collecting information requires potentially
-%high-overhead instrumentation.  Our design was guided by prior work on slicing
-%and concurrency debugging, and our empirical assessment of our system
-%(Section~\ref{sec:eval}).  The main design challenge is deciding which memory
-%dependences to track during the program's execution.  
-%
-%\paragraph{Tracking Most Dependences with High Overhead} 
-%
-%At one extreme is a design that captures all RAW, WAW, and WAR dependence
-%edges.    
-%%Another example is the {\em CCI-Prev} feature 
-%%used by CCI~\cite{cci} tracks inter-thread RAW, WAR, WAW, and RAR dependences (and some
-%%intra-thread ones) with their {\em CCI-Prev} feature. 
-%Such a design collects all dependence information, which is useful for
-%debugging and building analysis applications.  However, such a design falls
-%short on our efficiency goal. Tracking all dependences requires work on every
-%memory operation.  The additional work must update a data structure storing
-%dependences and access a thread-shared structure like the \lwt that indicates
-%which threads and code points are dependent.  Prior
-%work~\cite{stm,coredet,raceslicing} illustrates that the overhead of this
-%design point is frequently too high for use in deployment. 
-%
-%%Tallam, {\em et al} see overheads nearing 1000\% for server
-%%programs ({\em e.g.} Apache, MySQL) with largely independent tasks.  Without
-%%sampling, CCI's overheads as high as 57,000\% for some applications. In most
-%%other cases, overheads are lower, but still too high for deployed use without
-%%sampling.  Note that with sampling, CCI has deployable overheads, but we are
-%%looking for a deployable design that does not require sampling (Constraint 1).
-%
-%\paragraph{Tracking Many Dependences with Moderate Overhead}
-%Short of tracking all dependences, a system may make the decision to track an
-%{\em ad hoc} subset of dependences,  as we discussed in
-%Section~\ref{sec:background:comm}.  Such systems work well at their specific task
-%({\em e.g.}, debugging a certain class of errors).  They collect enough
-%dependence information to be useful for their particular application.  However,
-%their usefulness is limited because tracking dependences specific to one
-%application does not generalize to new applications.  
-%
-%One reason for tracking a subset of dependences is to reduce overheads.  Systems
-%that track {\em ad hoc} dependences tend to have lower overheads than those
-%that track all dependences.
-%%DefUse tracks intra- and inter-thread RAR and RAW dependences; Recon tracks
-%%inter-thread WAW and WAR dependences, and approximates some other dependences.
-%However, these systems mostly fall short of our efficiency goal as well, often having
-%overheads greater than 1000\%~\cite{defuse,recon}. Such overheads are too high for deployed
-%systems.  Some systems avoid such high overheads, but require hardware
-%support~\cite{avio, bugaboo, fdr} or sampling~\cite{cbi,cci} to do so, also
-%failing to satisfy our design goal.
-%
-%\paragraph{CTraps: Tracking Select Dependences with Low Overhead}
-%We make the case that our \ctraps designs satisfies our design goals.
-%
-%The tracking support for \ctraps is built atop last writer slices.  Last writer
-%slices require tracking only inter-thread WAW dependences.  Tracking only these
-%dependences does not require read operations to be instrumented.   Read
-%instrumentation has high overhead because reads are more frequent than writes.
-%\lws is efficient because tracking last writer slices does not need to track
-%any reads.  The overhead of \ctrapsfull and \ctrapsmm is low by default because
-%communication hooks (on reads) are no-ops by default.  \ctraps applications may
-%perform more analysis on reads and their performance overhead scales with the
-%complexity of their analysis.  We argue that such a ``pay-as-you-go'' model
-%that is efficient by default is the right approach, satisfying our efficiency
-%design goal.  We carefully evalute the overheads of our systems in
-%Section~\ref{sec:eval}.
-%
-%
-%Our \ctraps designs also satisfy our usefulness design goal.  \ctraps is useful for
-%implementing analyses, especially those focused on concurrent program behavior.
-%Inter-thread communication dependences show how values modified in one thread
-%flow to operations in another thread.  This systematically selected subset of
-%dependences is general enough for \ctrapsfull and \ctrapsmm to implement
-%dynamic analyses related to inter-thread data flow.  Furthermore, with
-%overheads low enough for deployement, \ctraps applications are useful not just
-%during development, but also at runtime and in production.  \lws is also useful
-%for providing important debugging information absent from current systems.  We
-%describe the debugging benefits of \lws in in Section~\ref{sec:debugging}.  
-%
-%%\ctrapsfull and \ctrapsmm provide the ability to track reads, but they remain efficient.  The key to
-%%their efficiency is the flexibility of read hooks. By default, the hooks are
-%%no-ops.  CTraps {\em applications} can carefully select which dependences to
-%%track, potentially increasing overhead with increases in functionality.  The
-%%baseline performance of both designs is efficient, satisfying Constraint 1.
-%%The flexibility provided by read and write hooks enables a variety of useful
-%%applications (two of which we implement and evaluate), satisfying Constraint 2.
-%
-
-
-%\section{Formalism and Correctness}
-%\label{sec:soundness}
-
-%We formalize last writer slices and \ctraps.  We then discuss the soundness and
-%completeness properties of our last writer slices and \ctraps designs.
-%We also discuss the impact on soundness and completeness of eliminating
-%redundant read instrumentation in \ctrapsmm.
-
-
-
-%\paragraph{Preserving Write Instrumentation}
-%Our system does not eliminate any write instrumentation.  Removing
-%instrumentation on writes may lead to {\em false traps}.  A false trap occurs
-%when a thread executes a memory access, refers to the \lwt, and the \lwt has an
-%out-of-date version of the last writer information.  False traps reflect unsoundness.
-%
-%
-%Figure~\ref{fig:unsoundness} illustrates how removing write instrumentation
-%leads to unsound trap delivery.  The figure shows memory operations in two
-%threads, all of which are assumed instrumented except the triangle marked
-%as uninstrumented.  The actual last thread and instruction to write is shown at
-%the left alongside the state of the LWT.  The figure assumes the behavior of
-%\ctrapsfull, except for the single uninstrumented write operation (all of our
-%designs instrument all writes).  The LWT becomes corrupted when Thread 2
-%performs its uninstrumented write -- the LWT indicates the last writer was
-%Thread 1, but Thread 2's uninstrumented write is the actual last writer.  When
-%Thread 2 executes its next read instruction, it refers to the corrupted LWT,
-%which indicates the read is communicating.  The system delivers a false trap on
-%the read.  This example illustrates the risk of eliminating write
-%instrumentation.  Our designs preserve instrumentation on all writes to avoid
-%this problematic situation.
-%
-%\begin{figure}
-%\centering
-%\includegraphics[width=\columnwidth]{figs/unsoundness.pdf}
-%\caption{\label{fig:unsoundness}Removing write instrumentation leads to unsoundness.  CTraps does not eliminate instrumentation on writes because it is unsound.}
-%\end{figure}
-%
-
-
-%\section{Extensions to \ctraps}
-%
-%\subsection{Sampling}
-%
-%\subsection{Context-Sensitivity}
-
+concurrency could also be implemented as \ctraps applications.  \ctraps also
+provides an interesting platform for developing new approaches to
+record/replay~\cite{chimera,fdr}.  \ctraps is an enabling platform for
+developing these or other analyses with low baseline overheads and without the
+need to build an entire concurrency analysis from scratch.
 
 \section{System Implementation and Applications}
 
 We implemented last writer slicing and \ctraps.  We built our compiler support
 as a plugin for GCC ({\tt gcc-4.7.0 20111112}).  We used GCC's points-to and
 escape analysis support to prune instrumentation to non-escaping memory
-locations.  We used GCC's dominator and post-dominator computations to
-implement our redundancy analysis.  Our compiler instruments calls to {\tt
-free} and {\tt delete} as writes to the pointer being deallocated.  Our
-analysis handles all code compilable using this version of GCC except for a few
-cases: we do not handle accesses that compile to GCC {\tt BITFIELD\_REFERENCE}
-IR types because these are undocumented, we do not handle inlined assembly
-instructions, and we do not handle C++ exceptions.  Note that these limitations
-of our research prototype are not fundamental and the limited cases are
-uncommon.   
+locations.  Our compiler instruments calls to {\tt free} and {\tt delete} as
+writes to the pointer being deallocated.  Our analysis handles all code
+compilable using this version of GCC except for a few cases: we do not handle
+accesses that compile to GCC {\tt BITFIELD\_REFERENCE} IR types because these
+are undocumented, we do not handle inlined assembly instructions, and we do not
+handle C++ exceptions.  Note that these limitations of our research prototype
+are not fundamental and the limited cases are uncommon.   
 
 We built our runtime system from scratch in about 1000 lines of C and C++ code.
 We implemented the LWT as a fixed size 2GB array of 64-bit words.  Each entry
 packs a program point and a thread identifier into the 64-bit word.  By
-default, program points are instruction addresses, but we also support bounded
-(2-address) context-sensitivity by packing the current instruction's address
-and the nearest return address into an LWT entry. When an access to a memory
-location occurs, we index into the LWT with the lower bits of the location's
-address.  Our prototype implementation uses a lossy resolution policy for hash
-collisions.  We use this policy in our prototype because it is faster and
-simpler than a chaining concurrent hash table implementation.  Collisions are
-extremely rare, so this simplification is unlikely to be a problem even in a
-more industrial strength implementation.  
+default, program points are single instruction addresses, but we also support
+limited (2-address) context-sensitivity by packing the current instruction's
+address and the nearest return address into a 64-bit LWT entry. When an access
+to a memory location occurs, we index into the LWT with the lower bits of the
+location's address.  Our prototype implementation uses a lossy resolution
+policy for hash collisions.  We use this policy in our prototype because it is
+faster and simpler than a chaining concurrent hash table implementation.
+Collisions are extremely rare, so this simplification is unlikely to be a
+problem even in a more industrial strength implementation.  
+
+We released our implementation, free and open-sourced~\cite{ctrapsonweb}, on
+the web and have had contributions to our codebase from members of the GCC
+development community.
 
 \section{Evaluation}
 \label{sec:eval}
-We evaluated our design along several axes.  We illustrate the debugging
-benefits of last writer slices in Section~\ref{sec:eval:debugging} using case
-studies conducted using real, buggy programs on real.   We evaluate our
-performance overheads to demonstrate that last writer slices and \ctraps are
-feasible for use in deployed systems.  We discuss the sources of \ctraps'
-overhead.   We show that \ctraps is useful by implementing two existing
-applications and analyzing their performance.  We characterize our
-instrumentation and the precision and performance impact of our redundancy
-analysis.  
+We evaluated last writer slices and \ctraps along several axes.  We show that
+last writer slices provide information that is useful during debugging in
+Section~\ref{sec:eval:debugging} using case studies on several buggy programs.
+We evaluate our performance overheads and show that last writer slices and
+\ctraps are feasible for use in deployed systems for a majority of workloads we
+studied.  We then characterize our instrumentation and discuss the sources of
+our system's run time overhead.   We show that \ctraps is useful by
+implementing two existing applications and analyzing their performance.    
 
 \subsection{Debugging with Last Writer Slices}
 \label{sec:eval:debugging}
-We illustrate the debugging benefits of last writer slices using three case
-studies.    
+We illustrate the debugging benefits of last writer slices by using our system
+to debug several real-world programs studied previously in the debugging
+literature.    
 
 \paragraph{HTTrack}
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
@@ -1003,24 +838,25 @@ a use-after-delete bug that leads to an assertion failure.  A worker thread
 tries to acquire a mutex after it has been deleted by the main thread during
 shutdown, causing the assertion to fail.  
 
-Last writer slices provide the key piece of information to debug this failure:
-the last write to the mutex before the worker tried acquiring it was when the
-main thread deleted it.  A developer is likely to begin debugging by checking
-the validity of the mutex.  Upon finding it is invalid ({\em i.e.}, it has
-been deleted), the developer is likely to probe to determine who deleted it.
-Without the information in the \lwt, answering that question is difficult
-because the main thread may have executed arbitrarily far from where it
-deleted the mutex.  With the \lwt, answering that question only requires the
-developer to check the mutex's entry.
+Last writer slices provide the key piece of information to debug this failure.
+When the program fails, the core dump shows that the mutex is invalid because
+it has been deleted.  The mutex's last writer slice shows that the last write
+to the mutex before the worker tried to acquire it was when the main thread
+deleted it.  The last writer slice reveals the connection between the the two
+pieces of code involved in the bug: the code that acquires the mutex and the
+code that deletes the mutex.  Note that this connection is not obvious when the
+program crashes because the main thread may have executed arbitrarily far from
+where it deleted the mutex before the worker thread crashes.  
 
 \paragraph{MySQL}
 
-We used last writer slices to debug an atomicity violation in MySQL-4.0.12.
-Figure~\ref{fig:mysqllws} shows involved code.  Thread 1 rotates the database's
-log file, marking it closed, opening a new log file, then marking it open
-again.  Log rotation should be atomic, but the lack of synchronization allows
-Thread 2 to run its insert during log rotation.  The insert code checks if the
-log is marked closed. If it is insert is not logged, manifesting the failure.
+We used last writer slices to debug an atomicity violation in MySQL-4.0.12 that
+is a critical security vulnerability.  Figure~\ref{fig:mysqllws} shows the
+buggy code.  Thread 1 rotates the database's log file, marking it closed,
+opening a new log file, then marking it open again.  Log rotation should be
+atomic, but the lack of synchronization allows Thread 2 to run its insert
+during log rotation.  The insert code checks if the log is marked closed. If
+the log is marked closed, the insert is not logged, manifesting the failure.
 We added an {\tt abort} statement to the non-logging case because this behavior
 is a security vulnerability that the bug report describes as ``critical''.
 Adding this {\tt abort} is reasonable, as the bug report describes the
@@ -1034,14 +870,15 @@ atomicity violation in MySQL 4.0.12.} The last writer slice reveals the code tha
 \end{figure}
 
 We triggered the bug by running an insert query during a log rotation.  The bug
-manifested, stopping execution at point {\bf C}.  As described in the bug
-report, the query went unlogged and examining the core dump revealed the log
-was marked closed at point {\bf B}.  However, the core dump did not reveal {\em
-why} the log was marked closed there.  Looking at the last writer slice for the
-{\tt log\_type} variable shows that it was written last Thread 1 at {\bf A}.
-Seeing that {\tt log\_type} is accessed concurrently in inserts and
-log rotations shows where synchronization needs to be added to fix the bug.
-
+manifested, stopping execution at {\bf C}.  As described in the bug report, the
+query went unlogged and examining the core dump revealed the log was marked
+closed at point {\bf B} ({\em e.g.}, {\tt log\_type} was {\tt LOG\_CLOSED}).
+However, the core dump did not reveal {\em why} the log was marked closed
+there.  The last writer slice at {\bf C} for the {\tt log\_type} variable shows
+that it was written last by Thread 1 at {\bf A}.  Without the last writer
+slice, the relationship between the log rotation code and the insert code is
+not apparent. The last writer slice reveals that the log rotation code
+interacts with the insert code incorrectly via the {\tt log\_type} variable.  
 
 
 \paragraph{JDK-StringBuffer}
@@ -1054,7 +891,7 @@ work~\cite{concurrencybugs}.
 
 Figure~\ref{fig:jdklws} shows how the bug can manifest as a failure. The string
 object pointed to by {\tt sb} in Thread 1's code contains a string buffer and a
-variable called {\tt count} that represents its length.  The {\tt append()}
+variable called {\tt count} that stores its length.  The {\tt append()}
 code should atomically read {\tt sb->count} and update the string's buffer.
 The failure occurs when the {\tt append()} code in Thread 1 is interleaved with
 the {\tt erase()} code in Thread 2 as indicated in the figure.  The {\tt
@@ -1079,17 +916,16 @@ This situation illustrates the value of the provenenace information furnished
 by last writer slices.  At the point of the failure the last writer slice for
 the length variable points to a decrement of that variable in the erase
 function.  The last writer slice illustrates the need for synchronization
-between the append function and the erase function.  In the absence of
-provenance information, the programmer would not be aware of that relationship.
+between the append function and the erase function.  
 
 
 \subsection{Performance Evaluation: Setup and Benchmarks}
 
 We conducted our evaluation on a machine running Linux 2.6.27-7, with a 2.27GHz
 8-core Xeon E5520 processor with 2-way SMT ({\em i.e.}, 16 execution contexts)
-and 10GB of memory.  We evaluated \ctraps using PARSEC, a set of architectural
-benchmark programs~\cite{parsec} and a collection of real server and desktop
-applications.    
+and 10GB of memory.  We evaluated our system using PARSEC, a set of
+architectural benchmark programs~\cite{parsec} and a collection of real server
+and desktop applications.    
 
 \subsubsection{PARSEC}
 
@@ -1107,8 +943,8 @@ throughput reported by {\tt SysBench}.
 
 \paragraph{Apache-2.4.3} 
 Apache-httpd is a popular web server.  To benchmark Apache, we used {\tt
-ApacheBench} to request a static {\tt html} page 1,000,000 times using 8 threads,
-measuring Apache's performance to be the throughput reported by {\tt
+ApacheBench} to request a static {\tt html} page 1,000,000 times using 8
+threads, measuring Apache's performance to be the throughput reported by {\tt
 ApacheBench}.  
 
 \paragraph{LevelDB-1.5.0}
@@ -1155,19 +991,19 @@ total time to complete 10,000 requests in each thread.
 \label{sec:eval:perf}
 
 The main performance result of our work is that our designs impose performance
-overheads that are low enough for use in deployed systems.
-Figure~\ref{fig:perfall} shows the slowdown suffered by our benchmarks due to last writer slicing
-and \ctraps running with ``no-op'' trap hooks ({\em i.e.}, no
-handlers), relative to the natively executing baseline.  These data reflect
-our main performance findings.    
+overheads that are low enough for use in deployed systems for many of our
+experimental workloads.  Figure~\ref{fig:perfall} shows the slowdown suffered
+by our benchmarks due to last writer slicing and \ctraps running with ``no-op''
+trap hooks ({\em i.e.}, no handlers), relative to the natively executing
+baseline.  These data reflect our main performance findings.    
 
 \paragraph{Last Writer Slices}
-The data show that last writer slicing has very low overheads with a geometric mean of less
-than 10\% across our server programs and less than 50\% across PARSEC.  Such
-low overheads are very likely to be tolerable in deployed systems.  In many
-cases (Apache, MySQL, {\tt dedup}, {\tt canneal}), overheads are negligible.
-In all but two cases ({\tt vips} \& {\tt swaptions}), the overhead of collecting last writer slices is
-less than 100\%.    
+The data show that last writer slicing has very low overheads with a geometric
+mean of less than 10\% across our server programs and less than 50\% across
+PARSEC.  Such low overheads are very likely to be tolerable in deployed
+systems.  In many cases (Apache, MySQL, {\tt dedup}, {\tt canneal}), overheads
+are negligible.  In all but two cases ({\tt vips} \& {\tt swaptions}), the
+overhead of collecting last writer slices is less than 100\%.    
 
 \paragraph{\ctraps}
 \ctraps imposes a geometric mean overhead of 14\% for server applications
