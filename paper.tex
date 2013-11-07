@@ -235,11 +235,12 @@ information we are focusing on in this work.
 
 \subsection{Debugging and Data Provenance}
 
-Data provenance information is directly useful during program debugging.
-Work on debugging~\cite{whylinechi,whylineicse} in the HCI and Software
-Engineering community shows that when programmers debug programs, they benefit
-from the ability to directly ask such provenance (``why'') questions of their
-debugger.  
+Data provenance information is directly useful during program debugging.  Work
+on debugging~\cite{whylinechi,whylineicse} in the HCI and Software Engineering
+community shows that when programmers debug programs, they benefit from the
+ability to directly ask such provenance (``why'') questions of their debugger.
+Note that that like prior work on debugging with provenance, in this work we
+focus on {\em debugging} -- understanding the root cause of a failure -- rather than {\em bug detection} -- finding new, unknown bugs.
 
 
 \begin{figure}[h]
@@ -330,7 +331,7 @@ tolerate two important sources of imprecision.
 
 First, many of these techniques track only an {\em ad hoc} subset of
 dependences.  For example, DefUse~\cite{defuse} tracks inter-thread WAR
-dependences, but not WAW dependences.  Recon tracks some inter-thread WAW and
+dependences, but not WAW dependences.  Recon~\cite{recon} tracks some inter-thread WAW and
 RAW dependences and approximates WAR dependences.  These techniques are useful
 despite an incomplete set of dependences.  Second, many of these systems rely
 on statistical models of software
@@ -573,7 +574,7 @@ only when accesses to the same data occur within a very short time interval,
 which is uncommon, {\em and} an unserializable interleaving of accesses and
 \lwt updates also occurs.
 
-{\bf TODO: Figure?}
+%{\bf TODO: Figure?}
 
 
 
@@ -654,7 +655,9 @@ Together, the \ctraps executable and the \ctraps handlers are deployed.
 by one thread that access a memory location that was last written by another
 thread, {\em i.e.}, communicating memory operations.  Traps are simply function
 calls made before such operations execution.  \ctraps implements traps using a
-combination of compiler and runtime library support.
+combination of compiler and runtime library support.  Note that we use the name
+``trap'' for the interposition points in \ctraps, but we implement traps using 
+function calls only, as opposed to signals or some other mechanism. 
 
 \paragraph{Compiler Support}
 Our compiler inserts a call to the \ctraps {\em trap hook} function immediately
@@ -793,18 +796,18 @@ are undocumented, we do not handle inlined assembly instructions, and we do not
 handle C++ exceptions.  Note that these limitations of our research prototype
 are not fundamental and the limited cases are uncommon.   
 
-We built our runtime system from scratch in about 1000 lines of C and C++ code.
-We implemented the LWT as a fixed size 2GB array of 64-bit words.  Each entry
-packs a program point and a thread identifier into the 64-bit word.  By
-default, program points are single instruction addresses, but we also support
-limited (2-address) context-sensitivity by packing the current instruction's
-address and the nearest return address into a 64-bit LWT entry. When an access
-to a memory location occurs, we index into the LWT with the lower bits of the
-location's address.  Our prototype implementation uses a lossy resolution
-policy for hash collisions.  We use this policy in our prototype because it is
-faster and simpler than a chaining concurrent hash table implementation.
-Collisions are extremely rare, so this simplification is unlikely to be a
-problem even in a more industrial strength implementation.  
+We built our runtime system from scratch.  We implemented the LWT as a fixed
+size 2GB array of 64-bit words, fixing our memory overheads.  Each entry packs a program point and a thread
+identifier into the 64-bit word.  By default, program points are single
+instruction addresses, but we also support limited (2-address)
+context-sensitivity by packing the current instruction's address and the
+nearest return address into a 64-bit LWT entry. When an access to a memory
+location occurs, we index into the LWT with the lower bits of the location's
+address.  Our prototype implementation uses a lossy resolution policy for hash
+collisions.  We use this policy in our prototype because it is faster and
+simpler than a chaining concurrent hash table implementation.  Collisions are
+extremely rare, so this simplification is unlikely to be a problem even in a
+more industrial strength implementation.  
 
 \subsection{Release}
 We released our implementation, free and open-sourced, on the
@@ -1094,12 +1097,12 @@ last writer slicing and \ctraps code to preserve performance.
  
 
 \subsection{Context-Sensitivity}
-{\bf TODO: Was this LWS or CTRAPS-NOOP or what?}
-We briefly evaluated the cost of context-sensitivity for \ctraps.  With a
-bounded 2-address context, the average overhead for server programs was 18\%
-and the average overhead for PARSEC was 145\%.  These data show that a
-restricted form of context-sensitive analysis is possible in \ctraps with
-overheads low enough for production.  
+%{\bf TODO: Was this LWS or CTRAPS-NOOP or what?}
+We briefly evaluated the cost of context-sensitivity using \ctraps with no-op
+trap handlers.  With a bounded 2-address context, the average overhead for
+server programs was 18\% and the average overhead for PARSEC was 145\%.  These
+data show that a restricted form of context-sensitive analysis is possible in
+\ctraps with overheads low enough for production.  
 
 
 \subsection{Evaluating CTraps Applications}
@@ -1261,6 +1264,11 @@ Furthermore, we focus on {\em concurrent} program debugging.  Prior work on
 provenance debugging that focused mainly on single threaded programs and had
 dependence slicing overheads are probably too high for production.
 
+Bad Apple Tracking~\cite{bondapple} is also a form of debugging with data
+provenance information. This work records the {\em origin} of an unusable value
+and can report it to a programmer when it is used in a way that causes a
+failure.
+
 \paragraph{Communication Tracking in Concurrent Programs}
 Several techniques have been proposed do some form of dependence and
 communication tracking to analyze concurrent programs.  
@@ -1298,7 +1306,7 @@ communication.  In general instrumentation systems, programmers write that code
 from scratch at their own risk.  
 
 \section{Conclusions}
-This work stems observes that we can collect a useful form of data provenance
+This work observes that we can collect a useful form of data provenance
 information with overheads low enough for use in deployed systems. 
 
 We developed system support that collects last writer slices with overheads
