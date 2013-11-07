@@ -203,3 +203,41 @@ stringbuffer.cpp:107    count -= len;
 
 
 
+
+APACHE 2.0.48 cache bug
+-----------------------
+
+
+
+#4  0x0000000000425a59 in cleanup_cache_object (obj=obj@entry=0x7fffd005f620)
+    at mod_mem_cache.c:284
+284	        free(obj->info.filename);
+(gdb) inspect obj
+$1 = (cache_object_t *) 0x7fffd005f620
+(gdb) inspect obj->info
+$2 = {content_type = 0x7fffd005f500 "0©\005Ðÿ\177", etag = 0x0, 
+  lastmods = 0x0, filename = 0x7fffd00595d0 "", date = 1383865953000000, 
+  lastmod = 0, lastmod_str = '\000' <repeats 29 times>, 
+  expire = 1122354000000000, request_time = 1383865953138277, 
+  response_time = 1383865953140116, len = 63, ims = 0, ius = 0, im = 0x0, 
+  inm = 0x0}
+
+(gdb) print /x LWT_table[ ((unsigned long)0x7fffd005f620) & 0xffffff ]
+$3 = 0x4000000425a66
+
+(gdb) print /x myTid 
+$4 = 0x3000000000000
+
+IOW:  I am thread 3.  I am freeing something that is being double freed.  The last one to write this thing is thread 4 @ 0x425a66 -- mod_mem_cache.c line 287
+
+mod_mem_cache.c:287
+-------------------
+    static void cleanup_cache_object(cache_object_t *obj)
+    {
+       mem_cache_object_t *mobj = obj->vobj;
+
+       //...
+
+287:   free(obj);
+
+

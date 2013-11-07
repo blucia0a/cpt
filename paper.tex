@@ -693,38 +693,40 @@ void trap(AccessType type,
 \caption{\label{fig:hookapi}The \ctraps trap handling interface.}
 \end{figure}
 
-\subsection{Formalism and Correctness}
-\label{sec:ctsoundness}
-To discuss the correctness of \ctraps, we first formalize trap delivery by
-building on our last writer slicing formalism from
-Section~\ref{sec:lastwriterslices}.  
 
-Given a program $P'$ already instrumented with \lwt updates, the \ctraps
-compiler produces $P''$. A thread $t$ in $P''$ executes a modified instruction
-sequence, $P''_{t} = \{ T(p^{t}_{j}), I(p^{t}_{1}), p^{t}_{1},$ $\ldots,
-T(p^{t}_{j}), I(p^{t}_{k_{t}}), p^{t}_{k_{t}} \}$, where $T(p^{t}_{j})$ is a
-trap hook call.  We consider a point $Q = \{q_1, \ldots, q_{e-2}\}$ after $e-2$
-instructions of an execution have executed and $q_{e} = p^{t}_{j}$ is about to
-execute after its trap hook $T(p^{t}_{j})$ and \lwt update $I(p^{t}_{j})$
-execute.  The trap hook $T(p^{t}_{j})$ {\em delivers} a trap before if $LWT[m]
-= (t',p^{t'}_{\ell w})$ and $t \ne t'$.  Informally, the trap hook delivers a
-trap before the instruction if the thread that last wrote $m$ is different from
-the one executing the instruction.  When a trap hook, $T(p^{t}_{j})$, delivers
-a trap, thread $t$ executes an arbitrary trap handler $H = \{h^{t}_{1}, \ldots,
-h^{t}_{h_{n}}\}$.  Thus, after the trap, the \lwt update, and the instruction
-execute, the execution reaches the new point $Q = (q_{1}, \ldots, T(q_{e}),
-h^{t}_{1}, \ldots, h^{t}_{h_{n}}, I(q_{e}), q_{e})$, and continues.
-
-A \ctraps implementation must be sound and complete to be correct.  A design is
-{\em sound} if it only delivers a trap when threads have communicated.  A
-design is {\em complete} if it always delivers a trap when threads have
-communicated.  The \ctraps compiler puts a trap hook on all read and write
-operations, and only on those operations.  Assuming a correct \lwt, \ctraps is
-correct.  Our \ctraps implementation also does not insert any synchronization
-into the program, so it comes with the same caveats related to data-race
-freedom as the \lwt.  The same arguments for \lwt correctness apply to the
-correctness of trap delivery and handling.  Most importantly, data-race freedom
-implies that trap hooks, \lwt updates, and accesses are all atomic.
+%MAYBE PUT THIS BACK IN
+%\subsection{Formalism and Correctness}
+%\label{sec:ctsoundness}
+%To discuss the correctness of \ctraps, we first formalize trap delivery by
+%building on our last writer slicing formalism from
+%Section~\ref{sec:lastwriterslices}.  
+%
+%Given a program $P'$ already instrumented with \lwt updates, the \ctraps
+%compiler produces $P''$. A thread $t$ in $P''$ executes a modified instruction
+%sequence, $P''_{t} = \{ T(p^{t}_{j}), I(p^{t}_{1}), p^{t}_{1},$ $\ldots,
+%T(p^{t}_{j}), I(p^{t}_{k_{t}}), p^{t}_{k_{t}} \}$, where $T(p^{t}_{j})$ is a
+%trap hook call.  We consider a point $Q = \{q_1, \ldots, q_{e-2}\}$ after $e-2$
+%instructions of an execution have executed and $q_{e} = p^{t}_{j}$ is about to
+%execute after its trap hook $T(p^{t}_{j})$ and \lwt update $I(p^{t}_{j})$
+%execute.  The trap hook $T(p^{t}_{j})$ {\em delivers} a trap before if $LWT[m]
+%= (t',p^{t'}_{\ell w})$ and $t \ne t'$.  Informally, the trap hook delivers a
+%trap before the instruction if the thread that last wrote $m$ is different from
+%the one executing the instruction.  When a trap hook, $T(p^{t}_{j})$, delivers
+%a trap, thread $t$ executes an arbitrary trap handler $H = \{h^{t}_{1}, \ldots,
+%h^{t}_{h_{n}}\}$.  Thus, after the trap, the \lwt update, and the instruction
+%execute, the execution reaches the new point $Q = (q_{1}, \ldots, T(q_{e}),
+%h^{t}_{1}, \ldots, h^{t}_{h_{n}}, I(q_{e}), q_{e})$, and continues.
+%
+%A \ctraps implementation must be sound and complete to be correct.  A design is
+%{\em sound} if it only delivers a trap when threads have communicated.  A
+%design is {\em complete} if it always delivers a trap when threads have
+%communicated.  The \ctraps compiler puts a trap hook on all read and write
+%operations, and only on those operations.  Assuming a correct \lwt, \ctraps is
+%correct.  Our \ctraps implementation also does not insert any synchronization
+%into the program, so it comes with the same caveats related to data-race
+%freedom as the \lwt.  The same arguments for \lwt correctness apply to the
+%correctness of trap delivery and handling.  Most importantly, data-race freedom
+%implies that trap hooks, \lwt updates, and accesses are all atomic.
 
 
 %\paragraph{Escape Analysis}
@@ -831,6 +833,26 @@ implementing two existing applications and analyzing their performance.
 We illustrate the debugging benefits of last writer slices by using our system
 to debug several real-world programs studied previously in the debugging
 literature.    
+
+\paragraph{Apache}
+%http://issues.apache.org/bugzilla/show_bug.cgi?id=21287
+%concurrency-bugs
+We conducted a case study using Apache httpd-2.0.48, which has a bug in its
+script cache. The cache uses reference counting to determine when to deallocate
+cached objects.  When a thread sees a reference count hit zero, it frees the
+object.  The bug is that the check that the count is zero and the deallocation
+are not atomic but it should be.  Multiple threads may see the zero reference
+count and free the object more than once, leading to a crash. 
+
+We debugged this issue by examining the core dump from a crashing execution.
+The core dump showed that the memory allocator aborted due to one thread
+freeing already freed memory at {\tt mod\_mem\_cache.c}, line 287.  We examined
+the last writer table entry for the object being freed at that point.  That
+entry revealed that a different thread last wrote that object at the same point
+in the code.  The information in the last writer table illustrates why the
+double free bug is happening -- two threads end up in the object deallocation
+routine for the same object, which should not happen.
+
 
 \paragraph{HTTrack}
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
