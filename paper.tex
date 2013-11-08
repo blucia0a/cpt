@@ -82,12 +82,14 @@ have undesirable consequences, like causing a crash or degrading performance.
 
 Debugging a concurrent program requires understanding how threads interact and
 {\em data provenance information} furnishes that understanding. A value's
-provenance is a description of the reason it is held by a variable.  Provenance
-can take on many forms, for example, a value's provenance could be the
-instruction that wrote it or the function that returned it.  Provenance
-information helps answer the question: "why does this variable contain this
-value?".  During debugging a programmer can use that information to connect 
-disparate parts of a program that interact, leading to a failure.
+provenance is a description of the reason that it is stored in a variable.
+Provenance can take on many forms, for example, a value's provenance could be
+the instruction that wrote it or the function that returned it.  Provenance
+information helps answer the question: "Why does this variable contain this
+value?", which is central to debugging.  
+
+%During debugging provenance helps a programmer better understand not just where failures occur, but where values came from, connectng disparate
+%parts of a program that interact, leading to a failure.
 
 In concurrent programs, collecting debugging information, like data provenance,
 from production systems is particularly important.  Concurrency bugs manifest
@@ -103,20 +105,20 @@ whylineicse, tipslicingsurvey}.  One effort tracked code that wrote unusable
 values into variables~\cite{badapples}.  That work showed that revealing the
 connection between a bad value's origin and a failure it causes is helpful
 during debugging.  Other work showed that programmers debug programs more
-effectively when they can explicitly ask "why" questions during
-debugging~\cite{tipslicingsurvey,whylineicse}.
+effectively when they can explicitly ask "why" questions about the origin of
+certain values during debugging~\cite{tipslicingsurvey,whylineicse}.
 
-These efforts have shown the promise of provenance, but are not a panacea.
-First, prior work~\cite{badapples} has focused on providing provenance
-information for only some unusable {\em values}, like {\tt NULL}.  Limiting the
-applicability of their technique to only some failures, like {\tt Null Pointer
-Exceptions}.  Second, while prior work has shown that limited provenance
-tracking for Java programs is possible with overheads low enough for
+These efforts have shown some of the promise of provenance, but are not a
+debugging panacea.  First, prior work~\cite{badapples} has focused on providing
+provenance information for only some unusable {\em values}, like {\tt NULL}.
+Limiting the applicability of their technique to only some failures, like {\tt
+Null Pointer Exceptions}.  Second, while prior work has shown that limited
+provenance tracking for Java programs is possible with overheads low enough for
 production~\cite{badapples}, a more general form of provenance tracking for C
 and C++ programs has been elusive.  Prior approaches that use
-slicing~\cite{thinslicing, tipslicingsurvey, whylineicse} or heavy-weight memory
-checkers~\cite{badapples} impose overheads too high for production for C and
-C++ programs. Third, no prior technique that we know of has collected
+slicing~\cite{thinslicing, tipslicingsurvey, whylineicse} or heavy-weight
+memory checkers~\cite{badapples} impose overheads too high for production for C
+and C++ programs. Third, no prior technique that we know of has collected
 provenance information that is tailored to debugging concurrent programs with
 overheads that are low enough for use in production systems.  Focusing on
 concurrency is important because a value could have provenance in any of a
@@ -142,7 +144,7 @@ Last writer slices are primarily useful for concurrency debugging, but we also
 observe that provenance information in the form of last writer slices is a
 useful foundation for implementing other concurrent program analyses.  Several
 tools from prior work has used {\em ad hoc} last-writer information as part of
-more heavy-weight, sophisticated in domains like bug detection ({\em e.g.},
+more heavy-weight analyses in domains like bug detection ({\em e.g.},
 ~\cite{dmtracker,avio}), automatic debugging ({\em e.g.},
 ~\cite{recon,conmem,conseq,cci}), profiling ({\em
 e.g.},~\cite{threadclustering, schedpredictionmodel}), and program
@@ -150,20 +152,20 @@ understanding~\cite{oshatr}.
 
 Motivated by these prior {\em ad hoc} efforts, we build {\em Communication
 Traps} or {\em \ctraps}  on top of last writer slices
-(Section~\ref{sec:ctraps}).  \ctraps checks the last writer slice of each potentially
-shared memory location when threads access those locations.  If the accessing thread
-is different from the thread that last wrote, the access signfies {\em communication}
-between the threads.  Communication is a common subject of 
+(Section~\ref{sec:ctraps}).  \ctraps checks the last writer slice of each
+potentially shared memory location when a thread accesses such a location.  If
+the accessing thread is different from the thread that last wrote the location,
+the access signifies {\em communication} between the threads.  When
+communication occurs, \ctraps delivers a software {\em trap} to the accessing
+thread giving it information about how communication occurred.  The trap can be
+handled by an analysis-specific trap handler.  Trap handlers implement {\em
+\ctraps applications} through an extensible interface that can interpose on the
+execution (Section~\ref{sec:apps}).  By default, \ctraps has very low overheads
+and similarly to last writer slicing are appropriate for use in production in
+many cases.  \ctraps applications can perform arbitrary concurrency analyses,
+but at their own discretion and cost.  As we show in our evaluation, the
+overhead of \ctraps applications scales with the complexity of their analysis.
 
-monitors inter-thread communication with
-overhead low enough for production use in many important cases.  When threads
-communicate, \ctraps delivers a software {\em trap} that can be handled by a
-trap handler.  Trap handlers implement {\em \ctraps applications} through an
-extensible interface that can analyze or interpose on the execution
-(Section~\ref{sec:apps}).  By default, \ctraps has very low overhead.  \ctraps
-applications can perform arbitrary dependence analyses, but at their own
-discretion and cost.  As we show in our evaluation, the overhead of \ctraps
-applications scales with the complexity of their analysis.
 
 
 %Provenance is also useful in implementing concurrent program analyses.
@@ -241,17 +243,19 @@ applications scales with the complexity of their analysis.
 To summarize, this work makes several contributions:
 \begin{itemize}
 
-\item{We describe last writer slicing, a dynamic analysis that tracks
-memory updates, capturing data provenance information.  We
-design and implement system support for collecting last writer slices.  }
+\item{We describe last writer slicing, an novel data provenance tracking
+mechanism, that produces information that is useful for debugging concurrent
+programs.  We design and implement system support for collecting last writer
+slices that is efficient enough for use in production.  }
 
-\item{Building on last writer slicing, we describe and implement \ctraps, which
-exposes inter-thread communication through an extensible trap interface.  }
+\item{Building on last writer slicing, we develop \ctraps, an extensible
+framework for implementing analyses of inter-thread communication in
+multi-threaded programs.  }
 
 \item{We evaluate the utility of last writer slices and \ctraps. We first
-present several case studies that show that last writer slices are useful for
-debugging real-world bugs.  We then show how \ctraps is useful for building
-dependence analyses by implementing two analyses from prior
+present a study of several real concurrent program bugs and show that last
+writer slices are useful for debugging.  We then show how \ctraps is useful for
+building dependence analyses by implementing two analyses from prior
 work~\cite{cci,defuse,recon}. }
 
 \item{We evaluate our system's performance using a variety of important
