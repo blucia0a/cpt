@@ -241,3 +241,25 @@ mod_mem_cache.c:287
 287:   free(obj);
 
 
+
+
+Apache 45606 - Not effective
+
+---Type <return> to continue, or q <return> to quit---q
+#1  0x00007ffff71d7b8b in abort () from /lib/x86_64-linux-gnu/libc.so.6
+#2  0x0000000000440603 in ap_log_assert (
+    szExp=szExp@entry=0x48f278 "!((queue)->nelts == (queue)->bounds)", 
+    szFile=szFile@entry=0x48f258 "fdqueue.c", nLine=nLine@entry=307)
+    at log.c:868
+#3  0x0000000000472a00 in ap_queue_push (queue=0x731468, sd=0x7fffd800cf98, 
+    p=0x7fffd800cf18) at fdqueue.c:307
+
+(gdb) print /x LWT_table[ ((unsigned long) &(queue->nelts)) & 0xffffff]
+$28 = 0x5000000472a45
+(gdb) print /x myTid
+$29 = 0x5000000000000
+(gdb) 
+
+The problem is that the thread that failed was the last one to write to the
+variable in the exception. 
+
