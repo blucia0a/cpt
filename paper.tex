@@ -28,7 +28,7 @@
 %\doublespacing
 \authorinfo{Anonymous for Submission}{}
 
-\title{\Large Last Writer Slicing: Efficient Data Provenance for Concurrent Program Debugging and Analysis}
+\title{Data Provenance for Concurrent Program Debugging and Analysis in Production Systems}
 
 %\authorinfo{Brandon Lucia \and Luis Ceze}{University of Washington, Department of Computer Science and Engineering}{\{blucia0a,luisceze\}@cs.washington.edu\\http://sampa.cs.washington.edu\\{\bf In Submission --- Please Do Not Distribute}}
 
@@ -41,26 +41,25 @@
 %improves debugging information and provides information to dynamic analyses and
 %runtime systems.  Prior work that continuously monitors cross-thread
 %dependences typically has overheads too high for production.  
-{\bf TODO Re-write}
-We design efficient system support for collecting {\em last writer slices} for
-shared-memory concurrent programs.  Last writer slices dynamically record the
-code responsible for shared variable updates.  Last writer slices reflect the
-provenance of values in memory, information that is useful during debugging.
-Using last writer slices, we build {\em communication traps} (\ctraps).
-\ctraps is a mechanism that efficiently monitors and can interpose on memory
-operations that share data between threads.  \ctraps is an extensible
-framework, exposing inter-thread dependences to {\em \ctraps applications} that
-can implement arbitrary dependence analyses.  
+We propose {\em last writer slices}, an analysis for shared-memory
+multi-threaded programs that tracks {\em data provenance information} in
+production code.  Last writer slices dynamically record the thread and
+operation that last wrote each variable, reflecting the {\em provenance} of
+values.  Provenance helps understand bugs and we provide last writer slices to
+programmers during debugging.  We build {\em communication traps}
+(\ctraps) using last writer slices.  \ctraps efficiently
+monitors and can interpose on operations that share data between
+threads.  \ctraps is extensible, exposing inter-thread dependences
+to {\em \ctraps applications} that implement arbitrary analyses.  
 
-We implement last writer slicing and \ctraps.  We show that last writer slices
-provide information that is useful for debugging several real-world bugs.  We
+We implement last writer slicing and \ctraps.  We conduct debugging studies of
+real, buggy programs showing last writer slices are useful for debugging.  We
 show \ctraps is useful by implementing two concurrency analyses from prior
-work.  We evaluate our designs on a set of server programs and standard
-benchmarks.  Our results show that collecting last writer slices has low run
-time overheads (0--15\%) for many important applications, like memcached,
-LevelDB, MySQL, and Apache.  We show that \ctraps imposes low run time
-overheads by default and that the overheads scale with the complexity of the
-analysis being implemented.
+work.  We evaluate the performance of our designs using server programs
+and standard benchmarks.  We show that collecting last writer slices
+has low run time overheads (0--15\%) for many applications,including  
+memcached, LevelDB, MySQL, and Apache.  We show that \ctraps imposes low 
+overheads by default and that overheads scale with analysis complexity.
 
 \end{abstract}
 
@@ -91,22 +90,23 @@ value?", which is central to debugging.
 %During debugging provenance helps a programmer better understand not just where failures occur, but where values came from, connectng disparate
 %parts of a program that interact, leading to a failure.
 
-In concurrent programs, collecting debugging information, like data provenance,
-from production systems is particularly important.  Concurrency bugs manifest
-as failures rarely.  When a deployed system fails and a programmer receives a
+Collecting debugging information, like data provenance, from production systems
+is particularly important for concurrent software.  Concurrency bugs manifest
+as failures rarely.  When a production system fails and a programmer receives a
 bug report, reproducing the reported failure to collect provenance information
 may be difficult or impossible.  It is essential to collect as much information
-as performance margins permit from deployed systems, to reduce the need for
+as performance margins permit from production, to reduce the need for
 time-consuming failure reproduction.
 
 
-Prior work has shown that provenence helps with debugging~\cite{badapples,
-whylineicse, tipslicingsurvey}.  One effort tracked code that wrote unusable
-values into variables~\cite{badapples}.  That work showed that revealing the
-connection between a bad value's origin and a failure it causes is helpful
-during debugging.  Other work showed that programmers debug programs more
-effectively when they can explicitly ask "why" questions about the origin of
-certain values during debugging~\cite{tipslicingsurvey,whylineicse}.
+Prior work have previously shown that some limited forms of provenence help
+with debugging~\cite{badapples, whylineicse, tipslicingsurvey}.  One effort
+tracked code that wrote unusable values into variables~\cite{badapples}.  That
+work showed that revealing the connection between a bad value's origin and a
+failure it causes is helpful during debugging.  Other work showed that
+programmers debug programs more effectively when they can explicitly ask "why"
+questions about the origin of certain values during
+debugging~\cite{tipslicingsurvey,whylineicse}.
 
 These efforts have shown some of the promise of provenance, but are not a
 debugging panacea.  First, prior work~\cite{badapples} has focused on providing
@@ -120,18 +120,18 @@ slicing~\cite{thinslicing, tipslicingsurvey, whylineicse} or heavy-weight
 memory checkers~\cite{badapples} impose overheads too high for production for C
 and C++ programs. Third, no prior technique that we know of has collected
 provenance information that is tailored to debugging concurrent programs with
-overheads that are low enough for use in production systems.  Focusing on
+overheads that are low enough for use in production systems.  Addressing
 concurrency is important because a value could have provenance in any of a
-large number of threads, making reasoning about why a variable has a value
-complex and difficult.
+large number of threads, making reasoning about why a variable contains that
+value complex and difficult.
 
 
-In that context, we design a novel form of in-production provenance tracking
-for concurrent programs with three goals.   (1) To collect a general form of
-provenance information, not limited to certain values.  (2) To provide
-provenance information that helps understand how threads interact, which is
-especially useful for concurrent program debugging.  (3) To work with overheads
-low enough for use in production (ideally, less than 10\%).
+In this work we design a novel form of in-production provenance tracking for
+concurrent programs with three goals.  (1) To collect a general form of
+provenance information, not limited to only certain values.  (2) To provide
+provenance information that helps understand how threads interact, which is the
+key to understanding concurrency bugs.  (3) To work with overheads low enough
+for use in production (ideally, less than 10\%).
 
 We develop a novel provenance tracking mechanism called {\em last writer
 slicing} that satisfies these goals.   As the program executes in production,
@@ -300,69 +300,67 @@ information we are focusing on in this work.
 
 \subsection{Debugging and Data Provenance}
 
-Data provenance information is directly useful during program debugging.  Work
-on debugging~\cite{whylinechi,whylineicse} in the HCI and Software Engineering
-community shows that when programmers debug programs, they benefit from the
-ability to directly ask such provenance (``why'') questions of their debugger.
-Note that that like prior work on debugging with provenance, in this work we
-focus on {\em debugging} -- understanding the root cause of a failure -- rather than {\em bug detection} -- finding new, unknown bugs.
-
+Data provenance information is directly useful during program debugging.  prior
+work~\cite{whylinechi,whylineicse} community showed that when programmers debug
+programs, they benefit from the ability to directly ask such provenance
+(``why'') questions of their debugger.  Origin tracking~\cite{badapples} and
+program slicing~\cite{tipslicingsurvey} also make debugging easier by reporting
+the provenance of values.  Like these prior efforts, in this work we focus on
+using data provenance information for {\em debugging} -- understanding the root
+cause of a failure -- as opposed to {\em bug detection} -- finding new, unknown
+bugs.
 
 \begin{figure}[h]
 \centering
-\includegraphics[width=\columnwidth]{figs/BackgroundCoreDumpFail.pdf}
-\caption{\label{fig:coreDumpFail}{\bf Ordering violation bug in HTTrack.} Simply examining memory does not provide provenance information that helps understand this bug.}
+\includegraphics[width=\columnwidth]{figs/JDKStringBufferFail.pdf}
+\caption{\label{fig:coreDumpFail}{\bf Atomicity violation bug in a string buffer implementation.} The core dump does not reveal the connection between {\tt append()} and {\tt erase()}, which is crucial to understand the bug.}
 \end{figure}
 
-Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
-plays in debugging, using an example of a real bug from HTTrack, a web caching
-tool.  The figure depicts two threads manipulating a data structure that
-contains a mutex\_lock.  The program has an ordering violation bug: the
-program crashes when Thread 2 tries to acquire the lock before Thread 1 has
-initialized it.  Assuming the run time environment supports it, a core dump
-delivered to the programmer after such a failure reveals very little about how
-to fix the bug.  The lock is uninitizalized, so the core dump may show that it
-holds {\tt NULL} or it may hold random bits.  Both scenarios provide no
-insight into the root cause of the failure, which is that the code permits a
-use of the lock before its initialization.   Comparing the core dump from the
-failing run to the memory image from a correct execution -- a helpful debugging
-strategy -- reveals only that in a correct execution, the lock contains valid
-mutex state.  This revalation is of limited use as it does not rule out
-arbitrary data corruption as the bug's root cause.
+Figure~\ref{fig:coreDumpFail} illustrates the role of provenance information in
+debugging, using buggy code from the JDK-1.4 stringbuffer library, adapted to
+C++ by other researchers and used variously in prior
+work~\cite{concurrencybugs}.  The stringbuffer object pointed to by {\tt sb} in
+Thread 1's code contains a buffer and a variable called {\tt count} that stores
+its length.  The {\tt append()} code should atomically read {\tt sb->count} and
+update the string's buffer (the full update code is not pictured).  The failure
+occurs when the {\tt append()} code in Thread 1 is interleaved with the {\tt
+erase()} code in Thread 2 as indicated in the figure.  The {\tt erase()} code
+updates the buffer's {\tt count}, making the version that Thread 1 read into
+{\tt len} stale.  Thread 1's assertion fails at {\bf B} using the stale {\tt
+len} value, causing a crash.  
 
-The vital, missing piece to solving this bug is provenance information.
-Debugging would be easier if the core dump included information about the
-thread and code point that last wrote the lock.  The programmer would see that
-no thread had initialized the lock in the failing execution, but that Thread 1
-initialized the lock in non-failing executions.  This information guides the
-programmer to fix the bug by adding synchronization that ensures the correct
-operation ordering.
+When the failure manifests, Thread 1 is at the assertion in {\tt append()}, as
+picture.  However, Thread 2 may have completed its erase operation and moved on
+to execute some unrelated code.  The call stack for Thread 2 may show nothing
+about its involvement in the failure, despite the fact that its interleaving
+with the {\tt append()} code is the root cause.  Examining the core dump, the
+programmer can see that the length and buffer are inconsistent, but is left to
+ask {\em why} they are inconsistent.  
 
-Another challenge in debugging this bug is that it manifests as a failure
+Understanding the connection between {\tt append()} and {\tt erase()} is the
+key to fixing this bug.  The provenance of the value stored in {\tt sb->count}
+at {\bf B} was the write at {\bf A} in {\tt erase()} and with that provenance
+information, the programmer would understand that key connection.  Prior
+provenance work on origin tracking for unusable values~\cite{badapples} does
+not help here.  The involved values are inconsistent, but they are all {\em
+usable} so their provenance would not be tracked.   
+
+Another challenge posed by this bug is that it manifests as a failure
 infrequently and under only real-world conditions.  If the programmer runs the
 program in a debugger, the failure may not manifest in a reasonable amount of
 time and running it may require unavailable real-world inputs.  Thus,
-collecting provenance or other information offline is time-consuming or
+collecting provenance or other information offline may be time-consuming or
 impossible.  A better strategy is to continuously collect that information in
 deployed systems and package it with core dumps sent to programmers with bug
 reports.  In this work, we propose a last writer slicing design that espouses
 this {\em in situ} data collection strategy and does so with overheads
 appropriate for production systems.
 
-%Dynamic dependence slices are especially useful for debugging if they are
-%available after a failure has occurred in a deployed system. However, slicing
-%in deployed systems is uncommon, because deployed systems demand low overheads
-%and slicing can have high overhead.  Our system provides provenance information
-%that is useful at debugging time by collecting {\em last writer slices} that
-%help understand inter-thread communication.  We track last writer slices with
-%overhead low enough for use in production code.  Deployable efficiency makes it
-%possible to collect and report last writer slices the same way today's systems
-%collect and report core dumps.
 
 \subsection{Tracking Dependences and Communication}
 \label{sec:background:comm}
-%\ctraps tracks dependences that correspond to {\em inter-thread communication}.
-
+{\bf TODO: Clean this up, downplay the "dependences" obsession and make it 
+a better match to the LWS mission, as stated in the intro -- provenance + instrumentation = analysis}
 Monitoring inter-thread dependences is the foundation of many useful
 concurrency analyses.  For example, in a software transactional memory (STM)
 system~\cite{stm} dependences correspond to interference between accesses in
@@ -441,6 +439,8 @@ they access.  Second, there is no action necessary for read operations.
 Making read operations cheap is key to making the overhead of last writer
 slicing low enough for deployment use.
 
+{\bf TODO: Fix this figure to reflect availability of LWS info if the program crashes/is stopped at *any* point in the exec (like the read X in thread 2).}
+
 \begin{figure}[h]
 \centering
 \includegraphics[scale=.6]{figs/BasicLWT.pdf}
@@ -470,32 +470,13 @@ Computing last writer slices is fast enough to deploy and use continuously
 Thus, last writer slices can be made part of the standard debugging
 information provided when a program fails.  
 
-\begin{figure}[h]
-\centering
-\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
-\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
-ordering violation in HTTrack.} The provenance information stored in the last
-writer slice for the mutex variable helps understand the bug's root cause.}
-\end{figure}
 
 %The core dump does not provide any
 %insight into why the mutex is invalid at the time of the call or what its
 %value should have been instead.
 
+{\bf TODO: Replace with the "fixed" version of the JDK figure (currently in eval).  Update the text to match the new figure.}
 
-Figure~\ref{fig:httlws} shows how last writer slices help understand the root
-cause of the concurrency bug from Figure~\ref{fig:coreDumpFail}.  Recall
-that the the program crashes at point {\bf B} when it calls {\tt
-hts\_mutex\_lock()} with an invalid mutex.    The root cause of this bug is
-that Thread 1 fails to initialize the mutex before Thread 2 uses that mutex.
-The last writer slices in the figure make this root cause clear: in the
-failing execution, the last writer slice indicates the mutex is uninitialized; in
-the non-failing execution, the last writer slice indicates the mutex was 
-initialized by Thread 1 at point {\bf A}.  This information tells the
-programmer that there is an ordering relationship between {\bf A} and {\bf B}
-that must be enforced to fix the bug.  Note that without last writer slices,
-the program crashes at {\bf B} and the core dump provides no information about
-the connection between point {\bf A} and point {\bf B} -- the programmer would be left to guess that the bug was an initialization problem.
 
 Another important trait of last writer slices illustrated by
 Figure~\ref{fig:httlws} is that last writer slices are reported back to the
@@ -544,6 +525,7 @@ escape function scope also cannot escape the thread executing the function.
 
 
 \subsection{\lwt Formalism and Correctness}
+{\bf TODO: Necessary?  Is it really interesting?}
 \label{sec:lwssoundness}
 To discuss the correctness of our \lwt-based last writer slice support, we
 first develop a formal description of last writer slices.  We consider an
@@ -895,6 +877,9 @@ implementing two existing applications and analyzing their performance.
 
 \subsection{Debugging with Last Writer Slices}
 \label{sec:eval:debugging}
+
+{\bf TODO: Table showing the bugs we looked at, vital stats, comparison to origin tracking}
+
 We illustrate the debugging benefits of last writer slices by using our system
 to debug several real-world programs studied previously in the debugging
 literature.    
@@ -920,9 +905,63 @@ routine for the same object, which should not happen.
 
 
 \paragraph{HTTrack}
-The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
-and the text in Section~\ref{sec:debugging} describes the benefit provided by
-last writer slices in debugging an ordering violation in HTTrack-3.43.9.  
+{\bf TODO: Deal with this duplication from the copy/paste}
+Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
+plays in debugging, using an example of a real bug from HTTrack, a web caching
+tool.  The figure depicts two threads manipulating a data structure that
+contains a mutex\_lock.  The program has an ordering violation bug: the
+program crashes when Thread 2 tries to acquire the lock before Thread 1 has
+initialized it.  Assuming the run time environment supports it, a core dump
+delivered to the programmer after such a failure reveals very little about how
+to fix the bug.  The lock is uninitizalized, so the core dump may show that it
+holds {\tt NULL} or it may hold random bits.  Both scenarios provide no
+insight into the root cause of the failure, which is that the code permits a
+use of the lock before its initialization.   Comparing the core dump from the
+failing run to the memory image from a correct execution -- a helpful debugging
+strategy -- reveals only that in a correct execution, the lock contains valid
+mutex state.  This revalation is of limited use as it does not rule out
+arbitrary data corruption as the bug's root cause.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
+\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
+ordering violation in HTTrack.} The provenance information stored in the last
+writer slice for the mutex variable helps understand the bug's root cause.}
+\end{figure}
+
+
+The vital, missing piece to solving this bug is provenance information.
+Debugging would be easier if the core dump included information about the
+thread and code point that last wrote the lock.  The programmer would see that
+no thread had initialized the lock in the failing execution, but that Thread 1
+initialized the lock in non-failing executions.  This information guides the
+programmer to fix the bug by adding synchronization that ensures the correct
+operation ordering.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
+\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
+ordering violation in HTTrack.} The provenance information stored in the last
+writer slice for the mutex variable helps understand the bug's root cause.}
+\end{figure}
+
+Figure~\ref{fig:httlws} shows how last writer slices help understand the root
+cause of the concurrency bug from Figure~\ref{fig:coreDumpFail}.  Recall
+that the the program crashes at point {\bf B} when it calls {\tt
+hts\_mutex\_lock()} with an invalid mutex.    The root cause of this bug is
+that Thread 1 fails to initialize the mutex before Thread 2 uses that mutex.
+The last writer slices in the figure make this root cause clear: in the
+failing execution, the last writer slice indicates the mutex is uninitialized; in
+the non-failing execution, the last writer slice indicates the mutex was 
+initialized by Thread 1 at point {\bf A}.  This information tells the
+programmer that there is an ordering relationship between {\bf A} and {\bf B}
+that must be enforced to fix the bug.  Note that without last writer slices,
+the program crashes at {\bf B} and the core dump provides no information about
+the connection between point {\bf A} and point {\bf B} -- the programmer would be left to guess that the bug was an initialization problem.
+
+
 
 \paragraph{PBZip2}
 We conducted a case study using a buggy version of PBZip2-0.9.1.    The bug is
@@ -975,22 +1014,11 @@ interacts with the insert code incorrectly via the {\tt log\_type} variable.
 
 \paragraph{JDK-StringBuffer}
 
-Last writer slices help elucidate a subtle atomicity violation in the
-StringBuffer library in version 1.4 of the Java JDK.  We use the C++ port of
-the buggy JDK and a driver program code developed in prior concurrency debugging
-work~\cite{concurrencybugs}.  
+The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
+and the text in Section~\ref{sec:debugging} describes the benefit provided by
+last writer slices in debugging an ordering violation in HTTrack-3.43.9.  
 
-
-Figure~\ref{fig:jdklws} shows how the bug can manifest as a failure. The string
-object pointed to by {\tt sb} in Thread 1's code contains a string buffer and a
-variable called {\tt count} that stores its length.  The {\tt append()}
-code should atomically read {\tt sb->count} and update the string's buffer.
-The failure occurs when the {\tt append()} code in Thread 1 is interleaved with
-the {\tt erase()} code in Thread 2 as indicated in the figure.  The {\tt
-erase()} code updates the buffer's length, making the version Thread 1 read
-stale.  Thread 1 uses its stale version in the function called at point {\bf
-B}, causing a crash.  
-
+{\bf TODO: Move this to Section 3 where it will live.}
 \begin{figure}[h]
 \centering
 \includegraphics[width=\columnwidth]{figs/JDKStringBufferDebug.pdf}
@@ -998,17 +1026,6 @@ B}, causing a crash.
 ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the interaction between the erase function and the append function that leads to a failure.}
 \end{figure}
 
-When the atomicity violation manifests, the appending thread is updating the
-string's underlying buffer.  The erasing thread, however, may have completed
-its erase operation.  The execution context of the erasing thread at the point
-of the failure provides no insight as to why the program failed.  Examining the memory image, the programmer can only conclude that the length and buffer are 
-inconsistent, but not why they are inconsistent.
-
-This situation illustrates the value of the provenenace information furnished
-by last writer slices.  At the point of the failure the last writer slice for
-the length variable points to a decrement of that variable in the erase
-function.  The last writer slice illustrates the need for synchronization
-between the append function and the erase function.  
 
 
 \subsection{Performance Evaluation: Setup and Benchmarks}
