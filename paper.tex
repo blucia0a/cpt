@@ -301,7 +301,7 @@ information we are focusing on in this work.
 \subsection{Debugging and Data Provenance}
 
 Data provenance information is directly useful during program debugging.  prior
-work~\cite{whylinechi,whylineicse} community showed that when programmers debug
+work~\cite{whylinechi,whylineicse} showed that when programmers debug
 programs, they benefit from the ability to directly ask such provenance
 (``why'') questions of their debugger.  Origin tracking~\cite{badapples} and
 program slicing~\cite{tipslicingsurvey} also make debugging easier by reporting
@@ -330,7 +330,7 @@ updates the buffer's {\tt count}, making the version that Thread 1 read into
 len} value, causing a crash.  
 
 When the failure manifests, Thread 1 is at the assertion in {\tt append()}, as
-picture.  However, Thread 2 may have completed its erase operation and moved on
+pictured.  However, Thread 2 may have completed its erase operation and moved on
 to execute some unrelated code.  The call stack for Thread 2 may show nothing
 about its involvement in the failure, despite the fact that its interleaving
 with the {\tt append()} code is the root cause.  Examining the core dump, the
@@ -475,7 +475,15 @@ information provided when a program fails.
 %insight into why the mutex is invalid at the time of the call or what its
 %value should have been instead.
 
-{\bf TODO: Replace with the "fixed" version of the JDK figure (currently in eval).  Update the text to match the new figure.}
+{\bf TODO: Update the text to explain how the last writer slice shown makes the conection between erase() and append(), showing the programmer their mistake.}
+
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/JDKStringBufferDebug2.pdf}
+\caption{\label{fig:jdklws}{\bf Using last writer slices to debug an
+ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the interaction between the erase function and the append function that leads to a failure.}
+\end{figure}
 
 
 Another important trait of last writer slices illustrated by
@@ -1016,15 +1024,7 @@ interacts with the insert code incorrectly via the {\tt log\_type} variable.
 
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
 and the text in Section~\ref{sec:debugging} describes the benefit provided by
-last writer slices in debugging an ordering violation in HTTrack-3.43.9.  
-
-{\bf TODO: Move this to Section 3 where it will live.}
-\begin{figure}[h]
-\centering
-\includegraphics[width=\columnwidth]{figs/JDKStringBufferDebug.pdf}
-\caption{\label{fig:jdklws}{\bf Using last writer slices to debug an
-ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the interaction between the erase function and the append function that leads to a failure.}
-\end{figure}
+last writer slices in debugging an ordering violation in the JDK-1.4 stringbuffer library.  
 
 
 
