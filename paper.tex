@@ -881,8 +881,6 @@ implementing two existing applications and analyzing their performance.
 \subsection{Debugging with Last Writer Slices}
 \label{sec:eval:debugging}
 
-{\bf TODO: Table showing the bugs we looked at, vital stats, comparison to origin tracking}
-
 We illustrate the debugging benefits of last writer slices by using our system
 to debug several real-world programs studied previously in the debugging
 literature.  Table~\ref{tab:bugs} provides an overview of the bugs we studied
@@ -902,16 +900,19 @@ value origin tracking, we indicate whether their analysis could help debug each
 bug, based on the description of their technique.
 
 \begin{table}
-\begin{tabular}{l|l|ccc}
-{\bf App} & {\bf Type} & {\bf Eff.?} & {\bf Triv.?} & {\bf Usef.?} \\ \hline
-mysql   & Atom.  &Yes  &No & Yes    \\
-pbzip2  & Order  &Yes  &No & Yes    \\
-httrack & Order  &Yes  &No & Yes    \\
-jdk-sb  & Atom.  &Yes  &No & Yes    \\
-apache1 & Atom.  &Yes  &No & Yes    \\ 
-apache2 & Atom.  &Yes  &No & Maybe  \\
+\scriptsize
+\centering
+\begin{tabular}{l|ll|l|ccc|c}
+{\bf App} & {\bf Ver. \#} & {\bf Bug \#} &{\bf Type} & {\bf Eff.?} & {\bf Triv.?} & {\bf Usef.?} & {\bf O.T.?}\\ \hline
+mysql  &  4.0.12 &  791     & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
+pbzip2 &  0.9.4  &  N/A     & Order  &Yes  &No    & Yes   & Yes \\
+httrack& 3.43.9  &  N/A     & Order  &Yes  &No    & Yes   & No  \\%Used w/o origin - no help
+jdk1.4 &  1.70   &          & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
+apache1&  2.0.48 &  21285   & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
+apache2&  2.2.9  &  45605   & Atom.  &Yes  &No    & Maybe & ??  \\
 \end{tabular}
-\caption{{\bf Evaluation of debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.}
+\caption{{\bf Debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
+\normalsize
 \end{table}
 
 
