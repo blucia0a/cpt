@@ -339,82 +339,73 @@ ask {\em why} they are inconsistent.
 
 Understanding the connection between {\tt append()} and {\tt erase()} is the
 key to fixing this bug.  The provenance of the value stored in {\tt sb->count}
-at {\bf B} was the write at {\bf A} in {\tt erase()} and with that provenance
-information, the programmer would understand that key connection.  Prior
-provenance work on origin tracking for unusable values~\cite{badapples} does
-not help here.  The involved values are inconsistent, but they are all {\em
-usable} so their provenance would not be tracked.   
+at {\bf B} was the write at {\bf A} in {\tt erase()}.  Provenance information
+shows the programmer that key connection.  Prior provenance work on origin
+tracking for unusable values~\cite{badapples} does not help here.  The involved
+values are inconsistent, but they are all {\em usable} so their provenance
+would not be tracked.   
 
 Another challenge posed by this bug is that it manifests as a failure
-infrequently and under only real-world conditions.  If the programmer runs the
-program in a debugger, the failure may not manifest in a reasonable amount of
-time and running it may require unavailable real-world inputs.  Thus,
-collecting provenance or other information offline may be time-consuming or
-impossible.  A better strategy is to continuously collect that information in
-deployed systems and package it with core dumps sent to programmers with bug
-reports.  In this work, we propose a last writer slicing design that espouses
-this {\em in situ} data collection strategy and does so with overheads
-appropriate for production systems.
+infrequently and under only real-world conditions.  Prior slicing and
+provenance debugging
+techniques~\cite{tipslicingsurvey,thinslicing,whylineicse}, have overheads too
+high to use in production.  Used offline, these techniques may not observe the
+failure in a reasonable amount of time and triggering the bug may require
+unavailable real-world inputs making offline analysis impossible.   A better
+strategy is to continuously collect that information in deployed systems and
+package it with core dumps sent to programmers with bug reports.  In this work,
+we propose a last writer slicing design that espouses this {\em in situ} data
+collection strategy and does so with overheads appropriate for production
+systems.
 
 
-\subsection{Tracking Dependences and Communication}
+\subsection{Communication Tracking in Concurrency Analyses}
 \label{sec:background:comm}
-{\bf TODO: Clean this up, downplay the "dependences" obsession and make it 
-a better match to the LWS mission, as stated in the intro -- provenance + instrumentation = analysis}
-Monitoring inter-thread dependences is the foundation of many useful
-concurrency analyses.  For example, in a software transactional memory (STM)
-system~\cite{stm} dependences correspond to interference between accesses in
-different threads that must be detected to rollback conflicting transactions.
-Deterministic concurrent runtime systems~\cite{coredet,grace} are similar --
-they monitor inter-thread dependences, to determine when to apply
-deterministic ordering constraints on threads' accesses.  STMs and
-deterministic systems must track all dependences and they must track them
-precisely, to provide strong guarantees as programming and execution models.
-Unfortunately, precision has a high runtime overhead -- {\em e.g.},
-CoreDet incurs a mean overhead of around 5x~\cite{coredet}.  This overhead is
-too high for use in production.  
 
-%The overhead comes from the need to precisely track read-after-write (RAW),
-%write-after-read (WAR), and write-after-write (WAW) dependences, taking action
-%({\em e.g.}, buffering) on most cross-thread dependences.  These systems track
-%dependences with additional code that runs around memory accesses.  To ensure
-%correctness, accesses and tracking code usually must be protected by
-%synchronization.  The high cost of synchronization exacerbates the overheads.
-
-In contrast to {\em imprecision intolerant} tasks like STM and deterministic
-execution, other tasks are more {\em imprecision tolerant}.  Imprecision
-tolerant systems help perform tasks like
+Many useful concurrency analyses rely on monitoring inter-thread
+communication.  The domains of these analyses include 
 debugging~\cite{defuse,conseq,recon,bugaboo,raceslicing,fasttrack,falcon},
 software engineering~\cite{oshajava,oshatr}, anomaly
 detection~\cite{avio,dmtracker,cci,daikon}, bug and failure
 avoidance~\cite{aviso,cfix} and concurrent performance
-profiling~\cite{threadcriticality,schedpredictionmodel}.  These
-systems also work by monitoring how data flows between threads.  They can
-tolerate two important sources of imprecision.
+profiling~\cite{threadcriticality,schedpredictionmodel}.  The breadth of
+applications illustrates the generality of communication tracking.
 
-First, many of these techniques track only an {\em ad hoc} subset of
-dependences.  For example, DefUse~\cite{defuse} tracks inter-thread WAR
-dependences, but not WAW dependences.  Recon~\cite{recon} tracks some inter-thread WAW and
-RAW dependences and approximates WAR dependences.  These techniques are useful
-despite an incomplete set of dependences.  Second, many of these systems rely
-on statistical models of software
-behavior~\cite{avio,cci,defuse,recon,bugaboo,falcon,dmtracker,aviso,threadcriticality,schedpredictionmodel}.
-Models often tolerate noise, so many of these techniques can relax the
-correctness constraints of their implementation and remain useful.  For
-example, some systems have chosen not to enforce atomicity of each memory
-access and its dependence tracking code, compromising precision for a boost in
-performance.
+Despite the potential of a general communication tracking mechanism, prior work
+has largely relied on {\em ad hoc} communication analyses.  For example,
+DefUse~\cite{defuse} tracks communication via read-after-write (RAW)
+dependences, but not write-after-write (WAW) dependences.  Recon~\cite{recon}
+tracks some inter-thread WAW and RAW dependences.  These analyses could both be
+built with a general communication tracking mechanism.  Unfortunately, their
+single-purpose implementations track slightly different information, making
+them incompatible and difficult to compose.
 
-These tools and techniques work in a variety of environments.  A common theme
-is the advantage reaped from use in a deployment environment.  Debugging tools,
-profilers, and anomaly detectors benefit from seeing diverse, real-world
-behavior.  Dynamic failure avoidance techniques must work in deployed systems
-to be effective.  Deployment environments demand low overheads.  
+These analyses vary in their purpose and environments, but a cross-cutting
+theme is the advantage reaped from their use in a deployment environment.
+Debugging tools, profilers, and anomaly detectors benefit from seeing diverse,
+real-world behavior.  Dynamic failure avoidance techniques must work in
+deployed systems to be effective.  Deployment environments demand low overheads
+and all of these analyses benefit from a general, high-performance
+communication tracking framework.  Unfortunately, many of these techniques are implemented using heavy-weight infrastructure, like binary instrumentation~\cite{pin}, making them inappropriate for use in production.  
 
-The design for \ctraps that we develop in this work monitors a subset of
-inter-thread dependences that correspond to inter-thread communication.
-\ctraps provides enough precision to build useful analyses and runtime systems
-with overhead low enough for use in production.
+There is a need for a general communication tracking framework that has
+performance overheads that are low enough to use in production systems.  As we
+describe in Section~\ref{sec:ctraps}, we aim to satisfy that need in this work.
+
+
+
+%For example, in a software transactional memory (STM) system~\cite{stm}
+%communication corresponds to interference between accesses in different threads
+%that must be detected to rollback conflicting transactions.  Deterministic
+%concurrent runtime systems~\cite{coredet,grace} similarly monitor
+%communication, to apply deterministic ordering constraints.  STMs and
+%deterministic systems must track all dependences and they must track them
+%precisely, to provide strong guarantees as programming and execution models.
+%Unfortunately, precision has a high runtime overhead -- {\em e.g.}, CoreDet
+%incurs a mean overhead of around 5x~\cite{coredet}.  This overhead is too high
+%for use in production.  
+
+
 
 
 
@@ -457,25 +448,29 @@ slicing low enough for deployment use.
 %relegating such techniques to working on traces~\cite{whylinechi} or debugging
 %executions run ``in the lab''.  
 
-At any point in an execution, the information stored in a memory location's
-\lwt entry represents the provenance of the data stored in that memory
-location.   Last writer slices do not explicitly record any information about
-read operations and they do not need to to be useful.  Interrupting the
-execution while debugging and examining an entry in the \lwt reveals the
-provenance of a value just when it is needed.  For example, if an assertion
-failure occurs due to an erroneous inter-thread data flow, the provenance of
-the data in the assertion's condition helps explain why the failure occurred.
-Computing last writer slices is fast enough to deploy and use continuously
-(see Section~\ref{sec:eval}) and the \lwt can be saved with a core dump.
-Thus, last writer slices can be made part of the standard debugging
-information provided when a program fails.  
+At each point in an execution, a memory location's \lwt entry represents the
+provenance of the data stored in that memory location.   Last writer slicing
+performs no action on read operations and to be useful, it does not need to.
+Instead, a programmer can examine an \lwt entry at any arbitrary point in an
+execution ({\em e.g.}, at a breakpoint), including after a failure, and see a
+value's provenance.  Including the \lwt with core dumps means provenance is
+available when post-mortem debugging production failures.
+
+Figure~\ref{fig:jdklws} illustrates how the information in the \lwt helps debug
+the JDK stringbuffer bug introduced in Figure~\ref{fig:coreDumpFail}.  Recall
+that the failure occurs because Thread 2's execution of {\tt erase()} violates
+the atomicity of Thread 1's execution of {\tt append()}.  The \lwt entry for
+{\tt sb->count} at {\bf B} shows the programmer that its last writer was Thread
+2 at {\bf A}. Thread 2 may have run ahead to an arbitrary point in its
+execution.  Nothing in the core dump implicates {\tt erase()} in causing
+this bug.  The last writer slice reveals the interference between {\tt append()}
+and {\tt erase()} via {\tt sb->count}, helping the programmer understand the
+bug's cause.
 
 
 %The core dump does not provide any
 %insight into why the mutex is invalid at the time of the call or what its
 %value should have been instead.
-
-{\bf TODO: Update the text to explain how the last writer slice shown makes the conection between erase() and append(), showing the programmer their mistake.}
 
 
 \begin{figure}[h]
@@ -487,13 +482,13 @@ ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice r
 
 
 Another important trait of last writer slices illustrated by
-Figure~\ref{fig:httlws} is that last writer slices are reported back to the
-programmer {\em with the core dump on a failure}.  Capturing good debugging
-information is especially important for concurrency bugs that manifest very
-rarely or in the presence of only peculiar real-world inputs.  A primary goal
-of this work is to show that we can collect last writer slices with overheads
-that are low enough for production use so they can be included pervasively in
-bug reports.
+Figure~\ref{fig:jdklws} is that when the assertion fails at {\bf B}, stopping
+the execution, the \lwt is saved and can be sent to the programmer with the
+core dump.  Capturing good debugging information is especially important for
+concurrency bugs that manifest very rarely or in the presence of only peculiar
+real-world inputs.  A primary goal of this work is to show that we can collect
+last writer slices with overheads that are low enough for production use so
+they can be included pervasively in bug reports.
 
 %We discuss last writer slices in more depth by first describing our run time
 %support for collecting them.  The system support consists of a runtime library
@@ -890,7 +885,35 @@ implementing two existing applications and analyzing their performance.
 
 We illustrate the debugging benefits of last writer slices by using our system
 to debug several real-world programs studied previously in the debugging
-literature.    
+literature.  Table~\ref{tab:bugs} provides an overview of the bugs we studied
+describing the program, bug type, and bug report identifier where applicable.
+We then provide a summary of last writer slicing's debugging benefits.  To do
+so, we mirror the evaluation strategy of bad value origin
+tracking~\cite{badapples}, as it is the only other low-overhead provenance
+tracking mechanism we know of.  We evaluate our system using their three
+evaluation criteria - (1) effectiveness, (2) triviality, and (3) usefulness.
+Our technique is effective if the last writer slice reports a code point that
+wrote a value that subsequently caused a failure.  A failure is trivially
+debuggable if its cause is made obvious by examining the core dump alone, {\em
+i.e.}, a last writer slice is unnecessary.  A last writer slice is useful if it
+is effective and the thread and code point in the slice actually help
+understand why the failure occurred or how to fix it.   To draw contrast to bad
+value origin tracking, we indicate whether their analysis could help debug each
+bug, based on the description of their technique.
+
+\begin{table}
+\begin{tabular}{l|l|ccc}
+{\bf App} & {\bf Type} & {\bf Eff.?} & {\bf Triv.?} & {\bf Usef.?} \\ \hline
+mysql   & Atom.  &Yes  &No & Yes    \\
+pbzip2  & Order  &Yes  &No & Yes    \\
+httrack & Order  &Yes  &No & Yes    \\
+jdk-sb  & Atom.  &Yes  &No & Yes    \\
+apache1 & Atom.  &Yes  &No & Yes    \\ 
+apache2 & Atom.  &Yes  &No & Maybe  \\
+\end{tabular}
+\caption{{\bf Evaluation of debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.}
+\end{table}
+
 
 \paragraph{Apache}
 %http://issues.apache.org/bugzilla/show_bug.cgi?id=21287
@@ -913,61 +936,70 @@ routine for the same object, which should not happen.
 
 
 \paragraph{HTTrack}
-{\bf TODO: Deal with this duplication from the copy/paste}
-Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
-plays in debugging, using an example of a real bug from HTTrack, a web caching
-tool.  The figure depicts two threads manipulating a data structure that
-contains a mutex\_lock.  The program has an ordering violation bug: the
-program crashes when Thread 2 tries to acquire the lock before Thread 1 has
-initialized it.  Assuming the run time environment supports it, a core dump
-delivered to the programmer after such a failure reveals very little about how
-to fix the bug.  The lock is uninitizalized, so the core dump may show that it
-holds {\tt NULL} or it may hold random bits.  Both scenarios provide no
-insight into the root cause of the failure, which is that the code permits a
-use of the lock before its initialization.   Comparing the core dump from the
-failing run to the memory image from a correct execution -- a helpful debugging
-strategy -- reveals only that in a correct execution, the lock contains valid
-mutex state.  This revalation is of limited use as it does not rule out
-arbitrary data corruption as the bug's root cause.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
-\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
-ordering violation in HTTrack.} The provenance information stored in the last
-writer slice for the mutex variable helps understand the bug's root cause.}
-\end{figure}
-
-
-The vital, missing piece to solving this bug is provenance information.
-Debugging would be easier if the core dump included information about the
-thread and code point that last wrote the lock.  The programmer would see that
-no thread had initialized the lock in the failing execution, but that Thread 1
-initialized the lock in non-failing executions.  This information guides the
-programmer to fix the bug by adding synchronization that ensures the correct
-operation ordering.
-
-\begin{figure}[h]
-\centering
-\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
-\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
-ordering violation in HTTrack.} The provenance information stored in the last
-writer slice for the mutex variable helps understand the bug's root cause.}
-\end{figure}
+%{\bf TODO: Deal with this duplication from the copy/paste}
+%Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
+%plays in debugging, using an example of a real bug from HTTrack, a web caching
+%tool.  The figure depicts two threads manipulating a data structure that
+%contains a mutex\_lock.  The program has an ordering violation bug: the
+%program crashes when Thread 2 tries to acquire the lock before Thread 1 has
+%initialized it.  Assuming the run time environment supports it, a core dump
+%delivered to the programmer after such a failure reveals very little about how
+%to fix the bug.  The lock is uninitizalized, so the core dump may show that it
+%holds {\tt NULL} or it may hold random bits.  Both scenarios provide no
+%insight into the root cause of the failure, which is that the code permits a
+%use of the lock before its initialization.     This revalation is of limited use as it does not rule out
+%arbitrary data corruption as the bug's root cause.
+%
+%\begin{figure}[h]
+%\centering
+%\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
+%\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
+%ordering violation in HTTrack.} The provenance information stored in the last
+%writer slice for the mutex variable helps understand the bug's root cause.}
+%\end{figure}
+%
+%
+%The vital, missing piece to solving this bug is provenance information.
+%Debugging would be easier if the core dump included information about the
+%thread and code point that last wrote the lock.  The programmer would see that
+%no thread had initialized the lock in the failing execution, but that Thread 1
+%initialized the lock in non-failing executions.  This information guides the
+%programmer to fix the bug by adding synchronization that ensures the correct
+%operation ordering.
 
 Figure~\ref{fig:httlws} shows how last writer slices help understand the root
-cause of the concurrency bug from Figure~\ref{fig:coreDumpFail}.  Recall
-that the the program crashes at point {\bf B} when it calls {\tt
-hts\_mutex\_lock()} with an invalid mutex.    The root cause of this bug is
-that Thread 1 fails to initialize the mutex before Thread 2 uses that mutex.
-The last writer slices in the figure make this root cause clear: in the
-failing execution, the last writer slice indicates the mutex is uninitialized; in
-the non-failing execution, the last writer slice indicates the mutex was 
-initialized by Thread 1 at point {\bf A}.  This information tells the
-programmer that there is an ordering relationship between {\bf A} and {\bf B}
-that must be enforced to fix the bug.  Note that without last writer slices,
-the program crashes at {\bf B} and the core dump provides no information about
-the connection between point {\bf A} and point {\bf B} -- the programmer would be left to guess that the bug was an initialization problem.
+cause of the concurrency bug from Figure~\ref{fig:coreDumpFail}.  The program
+crashes at point {\bf B} when it calls {\tt hts\_mutex\_lock()} with an invalid
+mutex.    The root cause of this bug is that Thread 1 fails to initialize the
+mutex before Thread 2 uses it.   The core dump is of little debugging use, only
+showing that, indeed, the lock is uninitialized.  Even if the programmer
+compared the core dump from the failing run to the memory image from a correct
+execution -- a helpful debugging strategy -- they would find only that in a
+correct execution, the lock contains valid mutex state.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
+\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
+ordering violation in HTTrack.} The provenance information stored in the last
+writer slice for the mutex variable helps understand the bug's root cause.}
+\end{figure}
+
+
+Looking at last writer slices make this root cause clear: in the failing
+execution, the last writer slice indicates the mutex is uninitialized; in the
+non-failing execution, the last writer slice indicates the mutex was
+initialized by Thread 1 at point {\bf A}. While the core dump provides no
+information about the connection between point {\bf A} and point {\bf B}, the
+last writer slice reveals that the programmer should ensure {\bf B} follows
+{\bf A} to prevent the failure.  Note that even augmenting the core dump with
+bad value origin tracking~\cite{badapples} does not help with this bug.  In the
+failing execution, origin tracking shows that the unusable lock is
+uninitialized, but in the non-failing exeuction, origin tracking does not
+monitor the {\em usable} lock value.  By contrast, last writer slicing tracks
+that crucial information, helping debug this complex concurrency bug. 
+
+
 
 
 
@@ -1368,7 +1400,7 @@ Furthermore, we focus on {\em concurrent} program debugging.  Prior work on
 provenance debugging that focused mainly on single threaded programs and had
 dependence slicing overheads are probably too high for production.
 
-Bad Apple Tracking~\cite{bondapple} is also a form of debugging with data
+Bad Apple Tracking~\cite{badapples} is also a form of debugging with data
 provenance information. This work records the {\em origin} of an unusable value
 and can report it to a programmer when it is used in a way that causes a
 failure.
