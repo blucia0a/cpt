@@ -894,22 +894,31 @@ implementing two existing applications and analyzing their performance.
 \label{sec:eval:debugging}
 
 We illustrate the debugging benefits of last writer slices by using our system
-to debug several real-world programs studied previously in the debugging
-literature.  Table~\ref{tab:bugs} provides an overview of the bugs we studied
-describing the program, bug type, and bug report identifier where applicable.
-We then provide a summary of last writer slicing's debugging benefits.  To do
-so, we mirror the evaluation strategy of bad value origin
+to debug six real-world programs studied previously in the debugging
+literature.  Table~\ref{tab:bugs} provides an overview of this evaluation and
+Section~\ref{sec:eval:debugging:cases} looks in detail at several cases to 
+better illustrate how last writer slices helps with debugging.
+
+In Table~\ref{tab:bugs}, we show the bugs we studied describing the program,
+bug type, and bug report identifier where applicable.  For each bug, we
+followed the procedure for installation and bug triggering described by the
+author of~\cite{concurrencybugs}.  We study a mixture of concurrency bug types
+in this work, including both atomicity and ordering violations.
+
+The table also summarizes our evaluation of last writer slicing's debugging
+benefits.  We mirror the evaluation strategy of bad value origin
 tracking~\cite{badapples}, as it is the only other low-overhead provenance
 tracking mechanism we know of.  We evaluate our system using their three
-evaluation criteria - (1) effectiveness, (2) triviality, and (3) usefulness.
-Our technique is effective if the last writer slice reports a code point that
-wrote a value that subsequently caused a failure.  A failure is trivially
-debuggable if its cause is made obvious by examining the core dump alone, {\em
-i.e.}, a last writer slice is unnecessary.  A last writer slice is useful if it
-is effective and the thread and code point in the slice actually help
-understand why the failure occurred or how to fix it.   To draw contrast to bad
-value origin tracking, we indicate whether their analysis could help debug each
-bug, based on the description of their technique.
+evaluation criteria - (1) {\bf effectiveness}, (2) {\bf triviality}, and (3)
+{\bf usefulness}.  Our technique is {\bf effective} if the last writer slice
+reports a code point that wrote a value that subsequently caused a failure.  A
+failure is {\bf trivial} to debug if its cause is made obvious by examining the
+core dump alone, {\em i.e.}, a last writer slice is unnecessary.  A last writer
+slice is {\bf useful} if it is effective and the thread and code point in the
+slice help understand why the failure occurred or how to fix it.   We directly
+compare to bad value origin tracking.    The {\bf O.T.} column in
+Table~\ref{tab:bugs} shows  whether their analysis could help debug each bug,
+based on the description of their technique.
 
 \begin{table}
 \scriptsize
@@ -923,29 +932,68 @@ jdk1.4 &  1.70   &          & Atom.  &Yes  &No    & Yes   & No  \\%All values us
 apache1&  2.0.48 &  21285   & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
 apache2&  2.2.9  &  45605   & Atom.  &Yes  &No    & Maybe & ??  \\
 \end{tabular}
-\caption{{\bf Debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
+\caption{\label{tab:bugs}{\bf Concurrency debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
 \normalsize
 \end{table}
 
+The results in Table~\ref{tab:bugs} show that for both atomicity and ordering
+violation bugs, last writer slices are effective and useful.  In all cases, we
+found that the last writer slice revealed the provenance of the data involved
+in the operation that caused the failure, so last writer slicing was effective.
+We found that none of the failures we looked at were trivially debuggable.
+This finding is consistent with the difficulty of debugging concurrency bugs --
+the core dump does not reveal the interaction between threads that led to a
+failure, only the result of that interaction that leads to the failure.  
 
-\paragraph{Apache}
-%http://issues.apache.org/bugzilla/show_bug.cgi?id=21287
-%concurrency-bugs
-We conducted a case study using Apache httpd-2.0.48, which has a bug in its
-script cache. The cache uses reference counting to determine when to deallocate
-cached objects.  When a thread sees a reference count hit zero, it frees the
-object.  The bug is that the check that the count is zero and the deallocation
-are not atomic but it should be.  Multiple threads may see the zero reference
-count and free the object more than once, leading to a crash. 
+Last writer slices were obviously useful in five of six cases.  In these cases,
+the root cause of the bug becomes clear when last writer slices show the
+inter-thread data flow led to a variable having a value that caused a failure.
+Using that information, we expect it would be straightforward in these cases to
+add synchronization to fix these bugs.  Note that without last writer slices,
+understanding the responsible inter-thread data flow and fixing the bug would
+be difficult.  For the remaining case, {\tt apache2}, last writer slices would
+probably help with debugging, but it is less obvious because this bug is a
+complex, multi-variable bug.  We provide more detail on {\tt apache2} in Section~\ref{sec:eval:debugging:cases}.
 
-We debugged this issue by examining the core dump from a crashing execution.
-The core dump showed that the memory allocator aborted due to one thread
-freeing already freed memory at {\tt mod\_mem\_cache.c}, line 287.  We examined
-the last writer table entry for the object being freed at that point.  That
-entry revealed that a different thread last wrote that object at the same point
-in the code.  The information in the last writer table illustrates why the
-double free bug is happening -- two threads end up in the object deallocation
-routine for the same object, which should not happen.
+Our evaluation shows that bad value origin tracking~\cite{badapples} is not
+likely to be helpful in five out of six cases where last writer slices is
+useful.  In one case, a use-after-delete bug in {\tt pbzip2}, bad value origin
+tracking helps.  For this bug, when one thread deletes a variable, it makes
+that variable unusable and bad value origin tracking would track that value.
+When the failure occurs, the programmer would then know why the value was
+deleted.  In the other five cases we looked at, the values involved in causing
+the failure are usable and would not be tracked by bad value origin tracking.
+
+\subsubsection{Case Studies}
+\label{sec:eval:debugging:cases}
+
+We now provide detailed cases studies showing the debugging role of last writer
+slices in several of the bugs we examined.  Space constraints prevent us from
+providing details for all cases.
+
+\paragraph{JDK-StringBuffer}
+The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
+and the text in Section~\ref{sec:debugging} describes the benefit provided by
+last writer slices in debugging an ordering violation in the JDK-1.4.
+
+%\paragraph{Apache}
+%%http://issues.apache.org/bugzilla/show_bug.cgi?id=21287
+%%concurrency-bugs
+%We conducted a case study using Apache httpd-2.0.48, which has a bug in its
+%script cache. The cache uses reference counting to determine when to deallocate
+%cached objects.  When a thread sees a reference count hit zero, it frees the
+%object.  The bug is that the check that the count is zero and the deallocation
+%are not atomic but it should be.  Multiple threads may see the zero reference
+%count and free the object more than once, leading to a crash. 
+%
+%We debugged this issue by examining the core dump from a crashing execution.
+%The core dump showed that the memory allocator aborted due to one thread
+%freeing already freed memory at {\tt mod\_mem\_cache.c}, line 287.  We examined
+%the last writer table entry for the object being freed at that point.  That
+%entry revealed that a different thread last wrote that object at the same point
+%in the code.  The information in the last writer table illustrates why the
+%double free bug is happening -- two threads end up in the object deallocation
+%routine for the same object, which should not happen.
 
 
 \paragraph{HTTrack}
@@ -1015,36 +1063,37 @@ that crucial information, helping debug this complex concurrency bug.
 
 
 
-
-\paragraph{PBZip2}
-We conducted a case study using a buggy version of PBZip2-0.9.1.    The bug is
-a use-after-delete bug that leads to an assertion failure.  A worker thread
-tries to acquire a mutex after it has been deleted by the main thread during
-shutdown, causing the assertion to fail.  
-
-Last writer slices provide the key piece of information to debug this failure.
-When the program fails, the core dump shows that the mutex is invalid because
-it has been deleted.  The mutex's last writer slice shows that the last write
-to the mutex before the worker tried to acquire it was when the main thread
-deleted it.  The last writer slice reveals the connection between the the two
-pieces of code involved in the bug: the code that acquires the mutex and the
-code that deletes the mutex.  Note that this connection is not obvious when the
-program crashes because the main thread may have executed arbitrarily far from
-where it deleted the mutex before the worker thread crashes.  
+%
+%\paragraph{PBZip2}
+%We conducted a case study using a buggy version of PBZip2-0.9.1.    The bug is
+%a use-after-delete bug that leads to an assertion failure.  A worker thread
+%tries to acquire a mutex after it has been deleted by the main thread during
+%shutdown, causing the assertion to fail.  
+%
+%Last writer slices provide the key piece of information to debug this failure.
+%When the program fails, the core dump shows that the mutex is invalid because
+%it has been deleted.  The mutex's last writer slice shows that the last write
+%to the mutex before the worker tried to acquire it was when the main thread
+%deleted it.  The last writer slice reveals the connection between the the two
+%pieces of code involved in the bug: the code that acquires the mutex and the
+%code that deletes the mutex.  Note that this connection is not obvious when the
+%program crashes because the main thread may have executed arbitrarily far from
+%where it deleted the mutex before the worker thread crashes.  
 
 \paragraph{MySQL}
 
 We used last writer slices to debug an atomicity violation in MySQL-4.0.12 that
 is a critical security vulnerability.  Figure~\ref{fig:mysqllws} shows the
-buggy code.  Thread 1 rotates the database's log file, marking it closed,
-opening a new log file, then marking it open again.  Log rotation should be
+buggy code.  Thread 1 rotates the database's log file.  Log rotation should be
 atomic, but the lack of synchronization allows Thread 2 to run its insert
-during log rotation.  The insert code checks if the log is marked closed. If
-the log is marked closed, the insert is not logged, manifesting the failure.
-We added an {\tt abort} statement to the non-logging case because this behavior
-is a security vulnerability that the bug report describes as ``critical''.
-Adding this {\tt abort} is reasonable, as the bug report describes the
-condition in the {\tt else} block as being an error.
+during log rotation.  In that case, the insert query not logged, manifesting
+the failure.  We added an {\tt abort} statement to the non-logging case because
+this behavior is a security vulnerability that the bug report describes as
+``critical''.  Adding the {\tt abort} is reasonable, as the bug report
+describes the {\tt else} block as an error case.  Running in a debugger, a
+programmer might equivalently use a breakpoint, rather than adding an
+{\tt abort}.
+
 
 \begin{figure}[h]
 \centering
@@ -1053,23 +1102,15 @@ condition in the {\tt else} block as being an error.
 atomicity violation in MySQL 4.0.12.} The last writer slice reveals the code that closes the log before a database insertion that goes unlogged, which is a security problem.}
 \end{figure}
 
-We triggered the bug by running an insert query during a log rotation.  The bug
-manifested, stopping execution at {\bf C}.  As described in the bug report, the
-query went unlogged and examining the core dump revealed the log was marked
-closed at point {\bf B} ({\em e.g.}, {\tt log\_type} was {\tt LOG\_CLOSED}).
-However, the core dump did not reveal {\em why} the log was marked closed
-there.  The last writer slice at {\bf C} for the {\tt log\_type} variable shows
-that it was written last by Thread 1 at {\bf A}.  Without the last writer
-slice, the relationship between the log rotation code and the insert code is
-not apparent. The last writer slice reveals that the log rotation code
-interacts with the insert code incorrectly via the {\tt log\_type} variable.  
+We triggered the bug by running an insert query during a log rotation and
+execution stopped at {\bf C}.  The core dump showed the log was marked closed,
+which is the failure state ({\em e.g.}, {\tt log\_type} was {\tt LOG\_CLOSED}).
+However, the core dump did not reveal {\em why} the log was marked closed.  The
+last writer slice at {\bf C} for {\tt log\_type} shows that it was written last
+by Thread 1 at {\bf A}, in the log rotation code, which should be atomic.
+Thus, the last writer slice shows the programmer the need for log rotation to
+be atomic with respect to the insert code to prevent this failure. 
 
-
-\paragraph{JDK-StringBuffer}
-
-The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
-and the text in Section~\ref{sec:debugging} describes the benefit provided by
-last writer slices in debugging an ordering violation in the JDK-1.4 stringbuffer library.  
 
 
 
@@ -1303,7 +1344,6 @@ applications are batch focused and compute-intensive; we expect the
 long-running, event-driven nature of server applications makes them a more
 important target than PARSEC for these types of analyses in production.  
 
-{\bf TODO: Compare with these analyses implemented using binary instrumentation}
 
 
 %In two of these cases, {\tt
@@ -1364,8 +1404,6 @@ larger proportion of accesses were able to be proved local (21\% -- 66\%).  The
 difference is likely due to the fact that server threads perform more
 independent work (as discussed in Section~\ref{sec:eval:parsecserver}).
 Eliminating instrumentation using escape analysis is key to high performance.  
-
-{\bf TODO: Run without escape analysis?}
 
 
 \section{Related Work}
