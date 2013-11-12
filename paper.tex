@@ -28,7 +28,7 @@
 %\doublespacing
 \authorinfo{Anonymous for Submission}{}
 
-\title{Data Provenance for Concurrent Program Debugging and Analysis in Production Systems}
+\title{Efficient Data Provenance Analysis for Concurrent Programs}
 
 %\authorinfo{Brandon Lucia \and Luis Ceze}{University of Washington, Department of Computer Science and Engineering}{\{blucia0a,luisceze\}@cs.washington.edu\\http://sampa.cs.washington.edu\\{\bf In Submission --- Please Do Not Distribute}}
 
@@ -114,18 +114,21 @@ bugs. First, prior work~\cite{badapples} has focused on providing provenance
 information for only some unusable {\em values}, like {\tt NULL}, which limits its applicability. 
 % Limiting the applicability of their technique to only some failures, like {\tt
 % Null Pointer Exceptions}.
-Second, while prior work has shown that limited provenance
-tracking for Java programs is possible with overheads low enough for
-production~\cite{badapples}, a more general form of provenance tracking for C
-and C++ programs has been elusive. Prior approaches that use
-slicing~\cite{thinslicing, tipslicingsurvey, whylineicse} or heavy-weight
-memory checkers~\cite{badapples}{\bf TODO: Brandon, check this reference, since you just cited it in the previous sentence.} impose overheads too high for production for
-C and C++ programs. Third, no prior technique that we know of has collected
-provenance information that is tailored to debugging concurrent programs with
-overheads that are low enough for use in production systems. Addressing
-concurrency is important because a value could have originated in any of a
-large number of threads, making reasoning about why a variable contains that
-value complex and difficult. In summary, the challenges in using provenance to debug concurrent programs are: (1) collecting the right information to characterize the concurrent execution behavior; and (2) making it efficient enough for general programs running in production settings. 
+Second, while prior work has shown that limited provenance tracking for Java
+programs is possible with overheads low enough for production~\cite{badapples},
+a more general form of provenance tracking for C and C++ programs has been
+elusive. Prior approaches that build on slicing~\cite{thinslicing,
+tipslicingsurvey, whylineicse} or heavy-weight memory checkers~\cite{badapples}
+impose overheads too high for production for C and C++ programs. Third, no
+prior technique that we know of has collected provenance information that is
+tailored to debugging concurrent programs with overheads that are low enough
+for use in production systems. Addressing concurrency is important because a
+value could have originated in any of a large number of threads, making
+reasoning about why a variable contains that value complex and difficult. In
+summary, the challenges in using provenance to debug concurrent programs are:
+(1) collecting the right information to characterize the concurrent execution
+behavior; and (2) making it efficient enough for general programs running in
+production settings. 
 
 In this work we address the challenges above and develop a novel form of
 in-production provenance tracking for concurrent programs. We have three
@@ -536,18 +539,16 @@ function in our runtime library just before each write that may access data
 last written by another thread (escaping memory accesses).  Write
 instrumentation calls are passed three pieces of information: the address of
 the memory word involved in the access, the thread identifier of the accessing
-thread, and the accessing program point.   
+thread, and the accessing program point.   We use a {\tt GCC}'s local function
+escape analysis to identify accesses to memory locations that are provably
+inaccessible to code running in other threads.  Such operations access unshared
+data and they are not instrumented by our compiler.  
 
-We use a {\tt GCC}'s local function escape analysis to identify accesses to
-memory locations that are provably inaccessible to code running in other
-threads.  Such operations access unshared data and they are not instrumented by
-our compiler.  
 %Using an inter-procedural thread escape analysis may eliminate more
 %instrumentation sites.  
 
 
 \subsection{\lwt Formalism and Correctness}
-{\bf TODO: Necessary?  Is it really interesting?}
 \label{sec:lwssoundness}
 To discuss the correctness of our \lwt-based last writer slice support, we
 first develop a formal description of last writer slices.  We consider an
@@ -557,7 +558,7 @@ instructions executed by thread $t$.  Without loss of generality, we assume all
 instructions are memory reads and writes, with the form $Op(m)$ where $Op$ is
 $Read$ or $Write$ and $m$ is a uniquely addressed memory location.
 A point in an execution of $P$ after $e$ instructions have
-executed is defined by $Q = \{q_{0}, \ldots, q_{e}\}$ where each $q \in Q$ is a
+executed is defined by $Q = (q_{0}, \ldots, q_{e})$ where each $q_{i} \in Q$ is a
 $p^{t}_{j}$ from one of the $k_t$ instructions of thread $t$.  We introduce
 $LWS[m]$ -- the Last Writer Slice for memory location $m$.   At any point $Q$,
 $LWS[m]$ holds $(t,p^{t}_{\ell w})$, where $p^{t}_{\ell w} = max_{\ell}( 
@@ -596,8 +597,7 @@ our implementation does not enforce the atomicity of \lwt updates and their
 corresponding program accesses.  In the absence of data-races our \lwt
 implementation is {\em always correct} and neither of these issues exist.  Both
 atomicity and ordering is enforced by the program synchronization that ensures
-consistency for the data being written by the instructions our system
-instruments.   
+consistency for program data.   
 
 We use our \lwt formalism to show that without data-races, \lwt updates and
 their corresponding memory accesses are atomic and well-ordered.  The relation
@@ -607,7 +607,7 @@ program synchronization with $p^{t'}_{j'} = Op(m)$, a later access to $m$ by
 any other thread $t'$ -- {\em i.e.}, $p^{t}_{j} \prec p^{t'}_{j'}$.  Our
 compiler inserts an \lwt update $I(p^{t}_{j})$ into $P'$ before its write
 operation, $p^{t}_{j}$. Thus, $I(p^{t}_{j}) \prec p^{t}_{j}$ due to program
-order.  Happens-before is transitive, so without data-races, $I(p^{t}_{j})
+order.  $I(p^{t'}_{j'})$ is inserted before $p^{t'}_{j'}$, but after the synchronization that orders $p^{t'}_{j'}$ and $p^{t}_{j}$, so $p^{t}_{j} \prec I(p^{t'}_{j'})$.  Happens-before is transitive, so without data-races, $I(p^{t}_{j})
 \prec p^{t}_{j} \prec I(p^{t'}_{j'}) \prec p^{t'}_{j'}$, meaning $I(p^{t}_{j})$
 happens before all accesses that $p^{t}_{j}$ happens before {\em and before
 their respective \lwt updates}, $I(p^{t'}_{j'})$.  Symmetrically, for any
@@ -643,7 +643,6 @@ only when accesses to the same data occur within a very short time interval,
 which is uncommon, {\em and} an unserializable interleaving of accesses and
 \lwt updates also occurs.
 
-%{\bf TODO: Figure?}
 
 
 
@@ -687,8 +686,7 @@ last writer slicing that we described in Section~\ref{sec:lastwriterslices}.
 Using last writer slice information, \ctraps dynamically tracks 
 inter-thread communication events. \ctraps exposes communication
 events as {\em traps} during an execution that {\em trap handlers} can handle
-to perform analysis and interposition.  We formalize trap delivery and handling
-in Section~\ref{sec:ctsoundness}.
+to perform analysis and interposition.  
 
 \subsection{\ctraps Design}
 
@@ -722,14 +720,13 @@ Together, the \ctraps executable and the \ctraps handlers are deployed.
 
 \ctraps delivers software traps before all read and write operations executed
 by one thread that access a memory location that was last written by another
-thread, {\em i.e.}, communicating memory operations.  Traps are simply function
-calls made before such operations execution.  \ctraps implements traps using a
-combination of compiler and runtime library support.  Note that we use the name
-``trap'' for the interposition points in \ctraps, but we implement traps using 
-function calls only, as opposed to signals or some other mechanism. 
+thread, {\em i.e.}, communicating memory operations.  Traps are simply inserted
+function calls (as opposed to, {\em e.g.}, signals) made before such operations
+execution.  \ctraps implements traps using a combination of compiler and
+runtime library support.   
 
 \paragraph{Compiler Support}
-Our compiler inserts a call to the \ctraps {\em trap hook} function immediately
+Our compiler inserts a call to the \ctraps~{\em trap hook} function immediately
 before all read and write operations that access potentially escaping memory
 locations.  Trap hooks are passed the address of the memory location being
 accessed, the thread identifier of the accessing thread, the type of operation
@@ -744,23 +741,23 @@ accessed.  If the thread identifier in the \lwt entry is different from the
 accessing thread, then the trap hook function delivers a trap to the accessing
 thread, just before the memory access is allowed to proceed.  To deliver a
 trap, the trap hook function calls {\em trap handler routines} that are defined
-in \ctraps applications.  Trap handler routines are like signal handlers.  They
-are registered with the \ctraps runtime when the program starts.  Trap handlers
-may contain arbitrary application-specific code.  Figure~\ref{fig:hookapi}
-shows the \ctraps trap handling API.  Trap handlers are passed the four pieces
-of information passed to the trap hook, as well as the \lwt's record of the
-program point and thread identifier of the last write to the involved memory
-location.
+in \ctraps applications.  Trap handler routines are like signal handlers.  The
+\ctraps runtime maintains a list of trap handlers that are registered when the
+program starts via a configuration stored in the environment.  Trap handlers
+may contain arbitrary application-specific code.  \ctraps defines a trap
+handling API.  Trap handlers are passed the four pieces of information passed
+to the trap hook, as well as the \lwt's record of the program point and thread
+identifier of the last write to the involved memory location.
 
-\begin{figure}[htb]
-\centering
-\begin{verbatim}
-void trap(AccessType type, 
-          ThdId currThd, ProgPt currPt,
-          ThdId lastThd, ProgPt lastPt);
-\end{verbatim}
-\caption{\label{fig:hookapi}The \ctraps trap handling interface.}
-\end{figure}
+%\begin{figure}[htb]
+%\centering
+%\begin{verbatim}
+%void trap(AccessType type, 
+%          ThdId currThd, ProgPt currPt,
+%          ThdId lastThd, ProgPt lastPt);
+%\end{verbatim}
+%\caption{\label{fig:hookapi}The \ctraps trap handling interface.}
+%\end{figure}
 
 
 %MAYBE PUT THIS BACK IN
@@ -882,7 +879,7 @@ more industrial strength implementation.
 
 \subsection{Release}
 We released our implementation, free and open-sourced, on the
-web~\cite{withheldforanonymity} and published it to the GCC plugin repository.
+web~\cite{ctrapsrelease} and published it to the GCC plugin repository.
 Since its release, we have seen contributions to our codebase from members of
 the GCC development community and downloads from interested developers.
 
@@ -890,18 +887,19 @@ the GCC development community and downloads from interested developers.
 \label{sec:eval}
 We evaluated last writer slices and \ctraps along several axes.  We show that
 last writer slices provide information that is useful during debugging in
-Section~\ref{sec:eval:debugging} using case studies on several buggy programs.
-We evaluate our performance overheads and show that last writer slices and
-\ctraps are feasible for use in deployed systems for a majority of workloads we
-studied.  We then characterize our instrumentation and discuss the sources of
-our system's run time overhead.   We show that \ctraps is useful by
-implementing two existing applications and analyzing their performance.    
+Section~\ref{sec:eval:debugging} looking at a set of buggy programs and
+comparing to prior, related work.  We evaluate our performance overheads and
+show that last writer slices and \ctraps are feasible for use in deployed
+systems for a majority of workloads we studied.  We then characterize our
+instrumentation and discuss the sources of our system's run time overhead.   We
+show that \ctraps is useful by implementing two existing applications and
+analyzing their performance.    
 
 \subsection{Debugging with Last Writer Slices}
 \label{sec:eval:debugging}
 
 We illustrate the debugging benefits of last writer slices by using our system
-to debug six real-world programs studied previously in the debugging
+to debug five real-world programs studied previously in the debugging
 literature.  Table~\ref{tab:bugs} provides an overview of this evaluation and
 Section~\ref{sec:eval:debugging:cases} looks in detail at several cases to 
 better illustrate how last writer slices helps with debugging.
@@ -910,7 +908,8 @@ In Table~\ref{tab:bugs}, we show the bugs we studied describing the program,
 bug type, and bug report identifier where applicable.  For each bug, we
 followed the procedure for installation and bug triggering described by the
 author of~\cite{concurrencybugs}.  We study a mixture of concurrency bug types
-in this work, including both atomicity and ordering violations.
+in this work, including both single- and multi-variable bugs and both atomicity
+and ordering violations.
 
 The table also summarizes our evaluation of last writer slicing's debugging
 benefits.  We mirror the evaluation strategy of bad value origin
@@ -936,40 +935,61 @@ mysql  &  4.0.12 &  791     & Atom.  &Yes  &No    & Yes   & No  \\%All values us
 pbzip2 &  0.9.4  &  N/A     & Order  &Yes  &No    & Yes   & Yes \\
 httrack& 3.43.9  &  N/A     & Order  &Yes  &No    & Yes   & No  \\%Used w/o origin - no help
 jdk1.4 &  1.70   &          & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
-apache1&  2.0.48 &  21285   & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
-apache2&  2.2.9  &  45605   & Atom.  &Yes  &No    & Maybe & ??  \\
+apache&  2.0.48 &  21285   & Atom.  &Yes  &No    & Yes   & Maybe\\%All values usable
+%apache2&  2.2.9  &  45605   & Atom.  &Yes  &No    & Maybe & ??  \\
 \end{tabular}
 \caption{\label{tab:bugs}{\bf Concurrency debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
 \normalsize
 \end{table}
 
 The results in Table~\ref{tab:bugs} show that for both atomicity and ordering
-violation bugs, last writer slices are effective and useful.  In all cases, we
-found that the last writer slice revealed the provenance of the data involved
-in the operation that caused the failure, so last writer slicing was effective.
-We found that none of the failures we looked at were trivially debuggable.
-This finding is consistent with the difficulty of debugging concurrency bugs --
-the core dump does not reveal the interaction between threads that led to a
-failure, only the result of that interaction that leads to the failure.  
+violation bugs, last writer slices are effective.  In all cases, we found that
+the last writer slice revealed the provenance of the data involved in the
+operation that caused the failure, so last writer slicing was effective.  We
+found that none of the failures we looked at were trivially debuggable.  This
+finding is consistent with the difficulty of debugging concurrency bugs -- the
+core dump does not reveal the interaction between threads that led to a
+failure, only the result of the interaction, which leads to the failure.  
 
-Last writer slices were obviously useful in five of six cases.  In these cases,
+Last writer slices were obviously useful in all five cases.  In these cases,
 the root cause of the bug becomes clear when last writer slices show the
 inter-thread data flow led to a variable having a value that caused a failure.
 Using that information, we expect it would be straightforward in these cases to
 add synchronization to fix these bugs.  Note that without last writer slices,
 understanding the responsible inter-thread data flow and fixing the bug would
-be difficult.  For the remaining case, {\tt apache2}, last writer slices would
-probably help with debugging, but it is less obvious because this bug is a
-complex, multi-variable bug.  We provide more detail on {\tt apache2} in Section~\ref{sec:eval:debugging:cases}.
+be difficult.  
+
+%For the remaining case, {\tt apache2}, last writer slices would
+%probably help with debugging, but it is less obvious because this bug is a
+%complex, multi-variable bug.  We provide more detail on {\tt apache2} in
+%Section~\ref{sec:eval:debugging:cases}.
 
 Our evaluation shows that bad value origin tracking~\cite{badapples} is not
-likely to be helpful in five out of six cases where last writer slices is
+helpful in three out of five cases where last writer slices is
 useful.  In one case, a use-after-delete bug in {\tt pbzip2}, bad value origin
 tracking helps.  For this bug, when one thread deletes a variable, it makes
 that variable unusable and bad value origin tracking would track that value.
 When the failure occurs, the programmer would then know why the value was
-deleted.  In the other five cases we looked at, the values involved in causing
-the failure are usable and would not be tracked by bad value origin tracking.
+deleted.  
+
+In the remaining case, {\tt apache}, bad value origin tracking may help.  The
+bug is an atomicity violation that leads to a double free.  Two threads
+manipulate an object's reference count and deallocate the object when the count
+hits zero. Zero-checks and deallocation should be atomic, but the code does not
+ensure they are.  If threads interleave their code, multiple threads might see
+zero reference counts, which is incorrect.  When that happens, both threads try
+to free the object and the second free causes a crash.  Bad value origin
+tracking may help in this case.  At the first free, the freed pointer becomes
+unusable and its origin is tracked.  At the crash, the bad value's reported
+origin is the code point that frees the object.  That information potentially
+helps debug the program by suggesting a double free.  However, in {\tt apache},
+there are many threads, some perform different tasks, and all may free that
+object at that code point.  Bad value origin tracking does not record the
+thread of the origin.  The programmer is left unsure of whether the problem is
+with single-threaded logic or with synchronization.  In contrast, last writer
+slices reports the freed value's origin's thread and code point, making it
+clear that the programmer is dealing with a concurrency bug, and which threads
+are involved.
 
 \subsubsection{Case Studies}
 \label{sec:eval:debugging:cases}
@@ -979,7 +999,7 @@ slices in several of the bugs we examined.  Space constraints prevent us from
 providing details for all cases.
 
 \paragraph{JDK-StringBuffer}
-The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:httlws},
+The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:jdklws},
 and the text in Section~\ref{sec:debugging} describes the benefit provided by
 last writer slices in debugging an ordering violation in the JDK-1.4.
 
@@ -1004,46 +1024,15 @@ last writer slices in debugging an ordering violation in the JDK-1.4.
 
 
 \paragraph{HTTrack}
-%{\bf TODO: Deal with this duplication from the copy/paste}
-%Figure~\ref{fig:coreDumpFail} illustrates the role that provenance information
-%plays in debugging, using an example of a real bug from HTTrack, a web caching
-%tool.  The figure depicts two threads manipulating a data structure that
-%contains a mutex\_lock.  The program has an ordering violation bug: the
-%program crashes when Thread 2 tries to acquire the lock before Thread 1 has
-%initialized it.  Assuming the run time environment supports it, a core dump
-%delivered to the programmer after such a failure reveals very little about how
-%to fix the bug.  The lock is uninitizalized, so the core dump may show that it
-%holds {\tt NULL} or it may hold random bits.  Both scenarios provide no
-%insight into the root cause of the failure, which is that the code permits a
-%use of the lock before its initialization.     This revalation is of limited use as it does not rule out
-%arbitrary data corruption as the bug's root cause.
-%
-%\begin{figure}[h]
-%\centering
-%\includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
-%\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
-%ordering violation in HTTrack.} The provenance information stored in the last
-%writer slice for the mutex variable helps understand the bug's root cause.}
-%\end{figure}
-%
-%
-%The vital, missing piece to solving this bug is provenance information.
-%Debugging would be easier if the core dump included information about the
-%thread and code point that last wrote the lock.  The programmer would see that
-%no thread had initialized the lock in the failing execution, but that Thread 1
-%initialized the lock in non-failing executions.  This information guides the
-%programmer to fix the bug by adding synchronization that ensures the correct
-%operation ordering.
-
 Figure~\ref{fig:httlws} shows how last writer slices help understand the root
-cause of the concurrency bug from Figure~\ref{fig:coreDumpFail}.  The program
-crashes at point {\bf B} when it calls {\tt hts\_mutex\_lock()} with an invalid
-mutex.    The root cause of this bug is that Thread 1 fails to initialize the
-mutex before Thread 2 uses it.   The core dump is of little debugging use, only
-showing that, indeed, the lock is uninitialized.  Even if the programmer
-compared the core dump from the failing run to the memory image from a correct
-execution -- a helpful debugging strategy -- they would find only that in a
-correct execution, the lock contains valid mutex state.
+cause of a concurrency bug from HTTrack-3.43.9.  The program crashes at point
+{\bf B} when it calls {\tt hts\_mutex\_lock()} with an invalid mutex.    The
+root cause of this bug is that Thread 1 fails to initialize the mutex before
+Thread 2 uses it.   The core dump is of little debugging use, only showing
+that, indeed, the lock is uninitialized.  Even if the programmer compared the
+core dump from the failing run to the memory image from a correct execution --
+a helpful debugging strategy -- they would find only that in a correct
+execution, the lock contains valid mutex state.
 
 \begin{figure}[h]
 \centering
@@ -1052,7 +1041,6 @@ correct execution, the lock contains valid mutex state.
 ordering violation in HTTrack.} The provenance information stored in the last
 writer slice for the mutex variable helps understand the bug's root cause.}
 \end{figure}
-
 
 Looking at last writer slices make this root cause clear: in the failing
 execution, the last writer slice indicates the mutex is uninitialized; in the
@@ -1063,9 +1051,10 @@ last writer slice reveals that the programmer should ensure {\bf B} follows
 {\bf A} to prevent the failure.  Note that even augmenting the core dump with
 bad value origin tracking~\cite{badapples} does not help with this bug.  In the
 failing execution, origin tracking shows that the unusable lock is
-uninitialized, but in the non-failing exeuction, origin tracking does not
-monitor the {\em usable} lock value.  By contrast, last writer slicing tracks
-that crucial information, helping debug this complex concurrency bug. 
+uninitialized, revealing no more than the core dump.  In the non-failing
+execution, origin tracking does not monitor the {\em usable} lock value, adding
+nothing.  By contrast, comparing the last writer slices for the failing and
+non-failing executions reveals how to fix this bug.  
 
 
 
@@ -1116,8 +1105,9 @@ However, the core dump did not reveal {\em why} the log was marked closed.  The
 last writer slice at {\bf C} for {\tt log\_type} shows that it was written last
 by Thread 1 at {\bf A}, in the log rotation code, which should be atomic.
 Thus, the last writer slice shows the programmer the need for log rotation to
-be atomic with respect to the insert code to prevent this failure. 
-
+be atomic with respect to the insert code to prevent this failure.  Bad value
+origin tracking does not help debug this bug because {\tt log\_type} only ever
+contains usable values so it would not be tracked.  
 
 
 
