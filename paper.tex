@@ -99,14 +99,13 @@ as performance margins permit from production, to reduce the need for
 time-consuming failure reproduction.
 
 
-Prior work have previously shown that some limited forms of provenence help
-with debugging~\cite{badapples, whylineicse, tipslicingsurvey}.  One effort
-tracked code that wrote unusable values into variables~\cite{badapples}.  That
-work showed that revealing the connection between a bad value's origin and a
+Prior work has previously shown that some limited forms of provenence help with
+debugging~\cite{badapples, whylineicse, tipslicingsurvey}.  One effort tracked
+code that wrote unusable values into variables~\cite{badapples}.  That work
+showed that revealing the connection between an unusable value's origin and a
 failure it causes is helpful during debugging.  Other work showed that
-programmers debug programs more effectively when they can explicitly ask "why"
-questions about the origin of certain values during
-debugging~\cite{tipslicingsurvey,whylineicse}.
+programmers debug more effectively when they can ask "why" questions about
+values during debugging~\cite{tipslicingsurvey,whylineicse}.
 
 These efforts have shown some of the promise of provenance, but are not a
 debugging panacea.  First, prior work~\cite{badapples} has focused on providing
@@ -121,7 +120,7 @@ memory checkers~\cite{badapples} impose overheads too high for production for C
 and C++ programs. Third, no prior technique that we know of has collected
 provenance information that is tailored to debugging concurrent programs with
 overheads that are low enough for use in production systems.  Addressing
-concurrency is important because a value could have provenance in any of a
+concurrency is important because a value could have originated in any of a
 large number of threads, making reasoning about why a variable contains that
 value complex and difficult.
 
@@ -146,7 +145,7 @@ useful foundation for implementing other concurrent program analyses.  Several
 tools from prior work has used {\em ad hoc} last-writer information as part of
 more heavy-weight analyses in domains like bug detection ({\em e.g.},
 ~\cite{dmtracker,avio}), automatic debugging ({\em e.g.},
-~\cite{recon,conmem,conseq,cci}), profiling ({\em
+~\cite{recon,conseq,cci}), profiling ({\em
 e.g.},~\cite{threadclustering, schedpredictionmodel}), and program
 understanding~\cite{oshatr}. 
 
@@ -157,7 +156,7 @@ potentially shared memory location when a thread accesses such a location.  If
 the accessing thread is different from the thread that last wrote the location,
 the access signifies {\em communication} between the threads.  When
 communication occurs, \ctraps delivers a software {\em trap} to the accessing
-thread giving it information about how communication occurred.  The trap can be
+thread, giving it information about how communication occurred.  The trap can be
 handled by an analysis-specific trap handler.  Trap handlers implement {\em
 \ctraps applications} through an extensible interface that can interpose on the
 execution (Section~\ref{sec:apps}).  By default, \ctraps has very low overheads
@@ -414,13 +413,16 @@ describe in Section~\ref{sec:ctraps}, we aim to satisfy that need in this work.
 A last writer slice is a dynamic property of a memory location at a point in a
 program's execution.   A memory location's last writer slice is a record
 containing the program point and the identifier of the thread that last wrote
-data to that memory location.  We gather last writer slices at runtime by
-maintaining a {\em last writer table} (\lwt) that maps from a memory
-location's address to its last writer slice.  Just before a thread writes to a
-memory location,  the thread first finds the memory location's entry in the
-\lwt and updates that entry with its thread identifier and its current point in the
-program.  After updating the \lwt, the thread performs the original memory
-access.
+data to that memory location.  
+
+
+We gather last writer slices at runtime by maintaining a {\em last writer
+table} (\lwt) that maps from a memory location's address to its last writer
+slice.  Just before a thread writes to a memory location, the thread first
+finds the memory location's entry in the \lwt and updates that entry with its
+thread identifier and its current point in the program.  After updating the
+\lwt, the thread performs the original memory access.  
+
 
 Figure~\ref{fig:basicLWT} shows the basic operation of the \lwt.  The right
 side of the figure shows a program execution with three threads.  On the left
@@ -498,31 +500,41 @@ they can be included pervasively in bug reports.
 %Section~\ref{sec:lwssoundness}.
 
 \subsection{Runtime \& Compiler Support}
- The \lwt is implemented as a {\em shadow memory} that holds one entry for
-each memory address accessed by the program.  Each \lwt entry records the
-thread and program point that last wrote to the entry's corresponding memory
-location.  When a thread performs a write to a memory location, it updates the
-\lwt by recording its thread identifier and the program point of its write
-operation to the memory location's \lwt entry.  A program point may be an
-instruction address, or a call stack.  We use instructions by default, but we experimented with 2-address bounded call-stacks as well.   
+
+Figure~\ref{fig:lwsoverview} shows an overview of our system support for last
+writer slicing.  The programmer writes their program as usual. Our compiler
+instruments write operations in the program with calls to our runtime that
+update the \lwt.  The \lwt is maintained in the runtime and saved for use
+during debugging, like the core dump. 
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=.9\columnwidth]{figs/LWS_Overview.pdf}
+\caption{\label{fig:lwsoverview}{\bf Overview of system support for last writer slicing.} Our compiler and runtime library ensure the \lwt remains updated so it can be used during debugging.}
+\end{figure}
+
+The \lwt implemented in the runtime library is a {\em shadow memory} that
+holds one entry for each potentially shared memory address accessed by the
+program.  Each \lwt entry records the thread and program point that last wrote
+to the entry's corresponding memory location.  When a thread performs a write
+to a memory location, it updates the \lwt by recording its thread identifier
+and the program point of its write operation to the memory location's \lwt
+entry.  A program point may be an instruction address, or a call stack.  We use
+instructions by default, but we experimented with 2-address bounded call-stacks
+as well.   
 
 Collecting last writer slices requires instrumentation on each write operation.
-We built an instrumenting compiler pass that inserts a call into our runtime
-system just before each write to a memory location that may be accessed by code
-executing in another thread (escaping memory accesses).  Write instrumentation
-calls are passed three pieces of information: the address of the memory word
-involved in the access, the thread identifier of the accessing thread, and the
-accessing program point.   
+We built an instrumenting compiler pass that inserts a call to an \lwt update
+function in our runtime library just before each write that may access data
+last written by another thread (escaping memory accesses).  Write
+instrumentation calls are passed three pieces of information: the address of
+the memory word involved in the access, the thread identifier of the accessing
+thread, and the accessing program point.   
 
-\subsubsection{Escape Analysis}
-We use a local function escape analysis to identify which accesses are to
-memory locations that can be statically guaranteed to be inaccessible to code
-running in other threads.  When a thread accesses a location that is
-inaccessible to code in other threads, there is no way that access can be a
-communicating access.  Such accesses are not instrumented by our compiler.  
-We rely on {\tt GCC}'s built-in function escape analysis to determine if a
-memory operation might lead to communication.  Locations determined not to
-escape function scope also cannot escape the thread executing the function.
+We use a {\tt GCC}'s local function escape analysis to identify accesses to
+memory locations that are provably inaccessible to code running in other
+threads.  Such operations access unshared data and they are not instrumented by
+our compiler.  
 %Using an inter-procedural thread escape analysis may eliminate more
 %instrumentation sites.  
 
@@ -689,8 +701,8 @@ Together, the \ctraps executable and the \ctraps handlers are deployed.
 
 \begin{figure}[htb]
 \centering
-\includegraphics[width=.90\columnwidth]{figs/SystemDiagram.pdf}
-\caption{\label{fig:systemdiagram}CTraps system support.}
+\includegraphics[width=.90\columnwidth]{figs/CTraps_Overview.pdf}
+\caption{\label{fig:systemdiagram}{\bf CTraps system support.}}
 \end{figure}
 
 
