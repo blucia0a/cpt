@@ -887,10 +887,10 @@ the GCC development community and downloads from interested developers.
 We evaluated last writer slices and \ctraps along several axes.  We show that
 last writer slices provide information that is useful during debugging in
 Section~\ref{sec:eval:debugging} looking at a set of buggy programs and
-comparing to prior, related work.  We evaluate our performance overheads and
+comparing to prior work.  We evaluate our performance overheads and
 show that last writer slices and \ctraps are feasible for use in deployed
 systems for a majority of workloads we studied.  We then characterize our
-instrumentation and discuss the sources of our system's run time overhead.   We
+instrumentation and discuss sources run time overhead.   We
 show that \ctraps is useful by implementing two existing applications and
 analyzing their performance.    
 
@@ -962,42 +962,41 @@ be difficult.
 %probably help with debugging, but it is less obvious because this bug is a
 %complex, multi-variable bug.  We provide more detail on {\tt apache2} in
 %Section~\ref{sec:eval:debugging:cases}.
-
 Our evaluation shows that bad value origin tracking~\cite{badapples} is not
-helpful in three out of five cases where last writer slices is
-useful.  In one case, a use-after-delete bug in {\tt pbzip2}, bad value origin
-tracking helps.  For this bug, when one thread deletes a variable, it makes
-that variable unusable and bad value origin tracking would track that value.
-When the failure occurs, the programmer would then know why the value was
-deleted.  
+helpful in three out of five cases where last writer slices is useful.  
+There are two cases where bad value origin tracking may help.  For a
+use-after-delete bug in {\tt pbzip2}, bad value origin tracking helps.  For
+this bug, when one thread deletes a variable, it makes that variable unusable
+and bad value origin tracking would track that value.  When the failure occurs,
+the programmer would then know why the value was deleted.  
 
-In the remaining case, {\tt apache}, bad value origin tracking may help.  The
-bug is an atomicity violation that leads to a double free.  Two threads
-manipulate an object's reference count and deallocate the object when the count
-hits zero. Zero-checks and deallocation should be atomic, but the code does not
-ensure they are.  If threads interleave their code, multiple threads might see
-zero reference counts, which is incorrect.  When that happens, both threads try
-to free the object and the second free causes a crash.  Bad value origin
-tracking may help in this case.  At the first free, the freed pointer becomes
-unusable and its origin is tracked.  At the crash, the bad value's reported
-origin is the code point that frees the object.  That information potentially
-helps debug the program by suggesting a double free.  However, in {\tt apache},
-there are many threads, some perform different tasks, and all may free that
-object at that code point.  Bad value origin tracking does not record the
-thread of the origin.  The programmer is left unsure of whether the problem is
-with single-threaded logic or with synchronization.  In contrast, last writer
-slices reports the freed value's origin's thread and code point, making it
-clear that the programmer is dealing with a concurrency bug, and which threads
-are involved.
+For {\tt apache}, bad value origin tracking may help.  The bug is an atomicity
+violation that leads to a double free.  Two threads manipulate an object's
+reference count and deallocate the object when the count hits zero. Zero-checks
+and deallocation should be atomic, but the code does not ensure they are.  If
+threads interleave their code, multiple threads might see zero reference
+counts, which is incorrect.  When that happens, both threads try to free the
+object and the second free causes a crash.  
 
-\subsubsection{Case Studies}
+Bad value origin tracking may help in this case.  At the first free, the freed
+pointer becomes unusable and its origin is tracked.  At the crash, the bad
+value's reported origin is the code point of the free. That information may
+help debug the program by suggesting a double free.  However, in {\tt apache},
+many threads perform different tasks and all call the same free code.  Bad
+value origin tracking does not record the thread information.  The programmer
+is left unsure whether the problem is with single-threaded logic or
+synchronization.  In contrast, last writer slices reports the code point and
+thread, making it clear the bug is a concurrency bug and identifying the
+involved threads.
+
+\subsubsection{Debugging Case Studies}
 \label{sec:eval:debugging:cases}
 
 We now provide detailed cases studies showing the debugging role of last writer
 slices in several of the bugs we examined.  Space constraints prevent us from
 providing details for all cases.
 
-\paragraph{JDK-StringBuffer}
+\paragraph{jdk-1.4}
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:jdklws},
 and the text in Section~\ref{sec:debugging} describes the benefit provided by
 last writer slices in debugging an ordering violation in the JDK-1.4.
@@ -1022,7 +1021,7 @@ last writer slices in debugging an ordering violation in the JDK-1.4.
 %routine for the same object, which should not happen.
 
 
-\paragraph{HTTrack}
+\paragraph{httrack}
 Figure~\ref{fig:httlws} shows how last writer slices help understand the root
 cause of a concurrency bug from HTTrack-3.43.9.  The program crashes at point
 {\bf B} when it calls {\tt hts\_mutex\_lock()} with an invalid mutex.    The
@@ -1075,7 +1074,7 @@ non-failing executions reveals how to fix this bug.
 %program crashes because the main thread may have executed arbitrarily far from
 %where it deleted the mutex before the worker thread crashes.  
 
-\paragraph{MySQL}
+\paragraph{mysql}
 
 We used last writer slices to debug an atomicity violation in MySQL-4.0.12 that
 is a critical security vulnerability.  Figure~\ref{fig:mysqllws} shows the
