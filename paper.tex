@@ -442,7 +442,6 @@ they access.  Second, there is no action necessary for read operations.
 Making read operations cheap is key to making the overhead of last writer
 slicing low enough for deployment use.
 
-{\bf TODO: Fix this figure to reflect availability of LWS info if the program crashes/is stopped at *any* point in the exec (like the read X in thread 2).}
 
 \begin{figure}[h]
 \centering
@@ -1405,89 +1404,81 @@ Eliminating instrumentation using escape analysis is key to high performance.
 
 \section{Related Work}
 
-There are several categories of prior work related to last writer slices and
-\ctraps.  
+\paragraph{Debugging with Data Provenance Information}
+The most related prior work looked at using various forms of provenance information for debugging.
+
+We have discussed bad value origin tracking ~\cite{badapples} throughout this
+work and compared directly with that technique in our evaluation.  Bad value
+origin tracking is like our work because they store provenance information to
+be used for debugging -- a similar goal to ours.  Bad value origin tracking
+differs from our work in several ways.  First, their technique only tracks the
+provenance of {\em unusable} values -- a fraction of all values in an
+execution.  Our work, instead, tracks provenance for any value stored in a
+potentially shared memory location, which includes a broader set of provenance
+and targets our technique to concurrency debugging.  Second, their technique
+does not run with overheads tolerable for performance for C and C++ programs.
+They implement their technique for C and C++ programs using Valgrind MemCheck,
+which has high runtime overheads.  Our technique has overheads low enough for
+production in many cases, especially in server applications.  Third, their
+technique does not explicity record thread information with tracked origins.
+Our work focuses on concurrency and we include thread information.  As we show
+in Section~\ref{sec:eval:debugging} thread information is important for
+understanding some bugs.  Fourth, their technique uses bad value piggy-backing
+to store origins, we use a shadow memory.
+
+Like our work, the WhyLine debugger~\cite{whylineicse, whylinechi} allows
+programmers to ask questions about why variables hold particular values during
+debugging.  WhyLine answers by presenting data- and control-flows that
+influenced those variables.  WhyLine differs from our work in that it uses
+dependence slicing on recorded executions to answer provenance questions and
+has overheads too high for production use.  WhyLine also did not explicitly
+focus on concurrency.
+
 
 \paragraph{Program Slicing}
-Slicing techniques~\cite{tipslicingsurvey} are techniques for identifying
-useful subsequences of a program's instructions.   Slicing can work by
-analyzing program code statically or analyzing execution traces dynamically.
-Many slicing techniques discussed in ~\cite{tipslicingsurvey} monitor control
-and data dependences to identify which parts of a program might be relevant to
-a task ({\em e.g., debugging}).
+Program slicing techniques identify useful subsequences of a program's
+instructions.   Slicing can work by analyzing program code statically or
+analyzing execution traces dynamically.  Many slicing techniques discussed in
+the a recent survey~\cite{tipslicingsurvey} monitor control and data
+dependences to identify which parts of a program might be relevant to a task
+({\em e.g., debugging}).
 
+Thin Slicing~\cite{thinslicing}, is a slicing technique that is related to our
+work.  Thin Slicing yields the set of statements that computed on or wrote
+values that influenced a particular variable's value (the ``seed'').  Thin
+Slicing is similar in that its slices provide provenance and it excludes
+control information like our work.  Thin Slicing is different in that it has
+overheads too high for production and focused on minimizing the size 
+of each slice. 
 
-Thin Slicing~\cite{thinslicing} is especially related to this work. Thin
-Slicing monitors and reports a select subset of dependent operations from an
-execution.  The goal is to eliminate some operations that would be included in
-a traditional slice to make the slice simpler and less costly to collect.
-While this work and Thin Slicing differ in what they collect and how, our
-motivation to monitor a select subset of dependences was similar to theirs.  
-
-
-%is unlike our work in that our work focused on
-%monitoring inter-thread dependences in production code without sampling or
-%hardware support.
-
-\paragraph{Debugging with Data Provenance Information}
-
-Prior work has looked at using data provenance information in
-debugging~\cite{whylineicse, whylinechi}.  The WhyLine debugger allowed
-programmers to ask questions about why particular variables held particular
-values during debugging.  WhyLine answered those questions by presenting data-
-and control-flows that influenced those variables.  WhyLine showed that
-provenance information is intuitive to programmers and makes debugging easier,
-justifying our focus on provenance information in our last writer slicing
-design.
-
-There are several characteristics of this work that distinguish it from prior
-work on debugging with data provenance information.  Unlike prior work, our
-work focuses on isolating a limited subset of dependence information that we
-can collect with run time overheads low enough for production use.
-Furthermore, we focus on {\em concurrent} program debugging.  Prior work on
-provenance debugging that focused mainly on single threaded programs and had
-dependence slicing overheads are probably too high for production.
-
-Bad Apple Tracking~\cite{badapples} is also a form of debugging with data
-provenance information. This work records the {\em origin} of an unusable value
-and can report it to a programmer when it is used in a way that causes a
-failure.
 
 \paragraph{Communication Tracking in Concurrent Programs}
 Several techniques have been proposed do some form of dependence and
 communication tracking to analyze concurrent programs.  
 
-CCI~\cite{cci}, Bugaboo~\cite{bugaboo}, Recon~\cite{recon}, and
-DefUse~\cite{defuse} all explicitly track inter-thread memory dependences at
-runtime.  Unlike our work, several of these techniques were not designed to run
-in production systems~\cite{recon,defuse}.  A distinguishing characteristic of
-our work is that it is effective and fast enough for production without the
-need to aggregate information from multiple different sampled executions, like
-CCI~\cite{cci}.  Additionally, our system does not require invasive hardware
-changes like Bugaboo~\cite{bugaboo} or LBA~\cite{paralog}.
+CCI~\cite{cci}, Bugaboo~\cite{bugaboo}, LBA~\cite{paralog}, Recon~\cite{recon},
+and DefUse~\cite{defuse} all explicitly track some thread interactions.  Unlike
+our work, several of these techniques were not designed to run in production
+systems~\cite{recon,defuse}.  A distinguishing characteristic of our work is
+that it is effective and fast enough for production without the need to
+aggregate information from multiple different sampled executions, like
+CCI~\cite{cci} does.  Additionally, our system does not require invasive
+hardware changes like Bugaboo~\cite{bugaboo} or LBA~\cite{paralog}.
 
-Other techniques~\cite{threadclustering,threadcriticality} use  hardware debug
-registers to monitor dependences efficiently enough for production use.  These
-techniques are similar to our work in that they track how threads interact.
-These techniques are different from our work in that they track information
-specific to the performance and our system provides general support.
+\paragraph{Extensible Program Instrumentation} 
+There are many systems for building analyses using program instrumentation.
+Binary instrumentation~\cite{pin,dynamorio,valgrind,roadrunner} is general and
+tracking provenance and communciation is possible in such systems.  
 
-\paragraph{Extensible Program Instrumentation}
-There are many systems for building analyses using extensible program
-instrumentation.  Binary instrumentation
-systems~\cite{pin,dynamorio,valgrind,roadrunner} provide completely general
-support to instrument arbitrary code -- instrumenting a program to track
-communciation is possible in such systems.  
-
-These systems are similar to our work in that they aim to enable dynamic
-analyses and runtime systems.  They are different from our work because they
-rely on dynamic rewriting, yielding overheads often too high for deployment.
-Instead, we trade generality for performance. Last writer slices and \ctraps
-provide extensible support in the restricted domain of tracking communication
-with overheads low enough for production.  Another difference is that our work
-handles some of the delicate, performance sensitive code required to track
-communication.  In general instrumentation systems, programmers write that code
-from scratch at their own risk.  
+These systems are similar to \ctraps in that they enable dynamic analyses.
+They are different from our work because they rely on dynamic binary
+translation, yielding overheads often too high for deployment.  We trade some
+generality for performance. \ctraps is effective mainly in the restricted
+domain of concurrency analyses, but has overheads low enough for production.
+Another difference is that our work handles some of the delicate, performance
+sensitive code required concurrency analyses, like last writer tracking.  In
+general instrumentation systems, programmers write that code from scratch at
+their own risk.  
 
 \section{Conclusions}
 This work observes that we can collect a useful form of data provenance
