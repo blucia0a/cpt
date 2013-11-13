@@ -71,7 +71,7 @@ threads interact by reading and writing memory locations.  Threads' reads and
 writes interleave arbitrarily and nondeterministically and each interleaving
 can yield different behavior.  Reasoning about thread interactions is a central
 challenge to building multi-threaded software because some thread interactions
-have undesirable consequences, like causing a crash or degrading performance.
+have undesirable consequences, like crashing or degrading performance.
 
 %A common approach to this challenge is to reason about dependent memory
 %operations.  Memory operations are dependent if their order determines the
@@ -124,31 +124,33 @@ prior technique that we know of has collected provenance information that is
 tailored to debugging concurrent programs with overheads that are low enough
 for use in production systems. Addressing concurrency is important because a
 value could have originated in any of a large number of threads, making
-reasoning about why a variable contains that value complex and difficult. In
-summary, the challenges in using provenance to debug concurrent programs are:
-(1) collecting the right information to characterize the concurrent execution
-behavior; and (2) making it efficient enough for general programs running in
-production settings. 
+reasoning about why a variable contains that value complex and difficult. 
+
+%In
+%summary, the challenges in using provenance to debug concurrent programs are:
+%(1) collecting the right information to characterize the concurrent execution
+%behavior; and (2) making it efficient enough for general programs running in
+%production settings. 
 
 In this work we address the challenges above and develop a novel form of
-in-production provenance tracking for concurrent programs. We have three
-goals. (1) To collect a general form of provenance information, not limited to
-only certain values. (2) To provide provenance information that helps
-understand how threads interact, which is the key to understanding concurrency
-bugs. (3) To work with overheads low enough for use in production (ideally,
-less than 10\%).
+in-production provenance tracking for concurrent programs. We have three goals.
+(1) To collect a general form of provenance information, not limited to only
+certain values. (2) To provide provenance information that helps understand how
+threads interact, which is the key to understanding concurrency bugs. (3) To
+work with overheads low enough for use in production (ideally, less than 10\%),
+especially for long-running server programs that experience a diversity of production behavior.
 
-We develop a novel provenance tracking mechanism called {\em last writer
+We develop a new provenance tracking mechanism called {\em last writer
 slicing} that satisfies these goals.   As the program executes in production,
 last writer slicing tracks the thread and program point that last wrote any
 value to each potentially shared memory location --- its provenance.  Last
 writer slices are saved with a core dump when the program fails and are
 available in the debugger ({\em e.g.}, for breakpoint debugging).
 
-Last writer slices are primarily useful for concurrency debugging, but we also
-observe that provenance information in the form of last writer slices is a
+Last writer slices are primarily useful for concurrency debugging, but we 
+observe that provenance information is a
 useful foundation for implementing other concurrent program analyses.  Several
-tools from prior work has used {\em ad hoc} last-writer information as part of
+tools from prior work have used {\em ad hoc} last-writer information as part of
 more heavy-weight analyses in domains like bug detection ({\em e.g.},
 ~\cite{dmtracker,avio}), automatic debugging ({\em e.g.},
 ~\cite{recon,conseq,cci}), profiling ({\em
@@ -252,7 +254,7 @@ overhead of \ctraps applications scales with the complexity of their analysis.
 To summarize, this work makes several contributions:
 \begin{itemize}
 
-\item{We describe last writer slicing, an novel data provenance tracking
+\item{We describe last writer slicing, a novel data provenance tracking
 mechanism, that produces information that is useful for debugging concurrent
 programs.  We design and implement system support for collecting last writer
 slices that is efficient enough for use in production.  }
@@ -309,7 +311,7 @@ information we are focusing on in this work.
 
 \subsection{Debugging and Data Provenance}
 
-Data provenance information is directly useful during program debugging.  prior
+Data provenance information is directly useful during program debugging.  Prior
 work~\cite{whylinechi,whylineicse} showed that when programmers debug
 programs, they benefit from the ability to directly ask such provenance
 (``why'') questions of their debugger.  Origin tracking~\cite{badapples} and
@@ -395,7 +397,7 @@ Debugging tools, profilers, and anomaly detectors benefit from seeing diverse,
 real-world behavior.  Dynamic failure avoidance techniques must work in
 deployed systems to be effective.  Deployment environments demand low overheads
 and all of these analyses benefit from a general, high-performance
-communication tracking framework.  Unfortunately, many of these techniques are implemented using heavy-weight infrastructure, like binary instrumentation~\cite{pin}, making them inappropriate for use in production.  
+communication tracking framework.  Unfortunately, many of these techniques are built using heavy-weight infrastructure, like binary instrumentation~\cite{pin}, with overheads too high for production.  
 
 There is a need for a general communication tracking framework that has
 performance overheads that are low enough to use in production systems.  As we
@@ -436,11 +438,14 @@ thread identifier and its current point in the program.  After updating the
 
 Figure~\ref{fig:basicLWT} shows the basic operation of the \lwt.  The right
 side of the figure shows a program execution with three threads.  On the left
-is the \lwt at the point of each memory access.  There are two key things to
+is the \lwt at the point of each memory access.  There are three key things to
 notice.  First, write operations update the \lwt entry of the memory location
-they access.  Second, there is no action necessary for read operations.
-Making read operations cheap is key to making the overhead of last writer
-slicing low enough for deployment use.
+they access.  Second, there is no action necessary for read operations.  Making
+read operations cheap is key to making the overhead of last writer slicing low
+enough for production use.  Third, if the program stops at a point like the
+{\tt Rd Y} illustrated in Thread 1, the \lwt holds provenance information for
+the involved values ({\em i.e.}, Thread 3 last wrote {\tt Y} at the code point
+shown). That information helps understand {\em why} {\tt Y} holds its value.
 
 
 \begin{figure}[h]
@@ -463,9 +468,9 @@ At each point in an execution, a memory location's \lwt entry represents the
 provenance of the data stored in that memory location.   Last writer slicing
 performs no action on read operations and to be useful, it does not need to.
 Instead, a programmer can examine an \lwt entry at any arbitrary point in an
-execution ({\em e.g.}, at a breakpoint), including after a failure, and see a
-value's provenance.  Including the \lwt with core dumps means provenance is
-available when post-mortem debugging production failures.
+execution and see a value's
+provenance ({\em e.g.}, at a breakpoint or after a failure).  Including the \lwt with core dumps means provenance is available
+when post-mortem debugging production failures.
 
 Figure~\ref{fig:jdklws} illustrates how the information in the \lwt helps debug
 the JDK stringbuffer bug introduced in Figure~\ref{fig:coreDumpFail}.  Recall
@@ -522,26 +527,26 @@ during debugging, like the core dump.
 \caption{\label{fig:lwsoverview}{\bf Overview of system support for last writer slicing.} Our compiler and runtime library ensure the \lwt remains updated so it can be used during debugging.}
 \end{figure}
 
-The \lwt implemented in the runtime library is a {\em shadow memory} that
-holds one entry for each potentially shared memory address accessed by the
-program.  Each \lwt entry records the thread and program point that last wrote
-to the entry's corresponding memory location.  When a thread performs a write
-to a memory location, it updates the \lwt by recording its thread identifier
-and the program point of its write operation to the memory location's \lwt
-entry.  A program point may be an instruction address, or a call stack.  We use
-instructions by default, but we experimented with 2-address bounded call-stacks
-as well.   
+The \lwt implemented in the runtime library is a {\em shadow memory} that holds
+one entry for each potentially shared memory address accessed by the program.
+Each \lwt entry records the thread and program point that last wrote to the
+entry's corresponding memory location.  When a thread performs a write to a
+memory location, our runtime library's \lwt update function updates the \lwt by
+recording the thread's identifier and the program point of the write operation
+in the memory location's \lwt entry.  A program point may be an instruction
+address or a call stack.  We use instructions by default, but we also experimented
+with 2-address call stacks.   
 
 Collecting last writer slices requires instrumentation on each write operation.
-We built an instrumenting compiler pass that inserts a call to an \lwt update
+We built an instrumenting compiler pass that inserts a call to the \lwt update
 function in our runtime library just before each write that may access data
-last written by another thread (escaping memory accesses).  Write
-instrumentation calls are passed three pieces of information: the address of
+last written by another thread (escaping memory accesses).  \lwt update 
+calls are passed three pieces of information: the address of
 the memory word involved in the access, the thread identifier of the accessing
 thread, and the accessing program point.   We use a {\tt GCC}'s local function
 escape analysis to identify accesses to memory locations that are provably
 inaccessible to code running in other threads.  Such operations access unshared
-data and they are not instrumented by our compiler.  
+data and we do not instrument them.  
 
 %Using an inter-procedural thread escape analysis may eliminate more
 %instrumentation sites.  
@@ -575,8 +580,8 @@ A {\em complete} design always updates $LWT[m]$ when $m$ is written.  Our
 compiler inserts \lwt updates before every write operation (for completeness)
 and only before write operations (for soundness).  Formally, given a program,
 $P$, our compiler pass transforms it to a new program, $P'$.  Each thread in
-$P'$ executes a modified sequence of instructions: $P'_{t} \in P' = \{
-I(p^{t}_{1}), p^{t}_{1}, \ldots, I(p^{t}_{k_{t}}), p^{t}_{k_{t}} \}$.
+$P'$ executes a modified sequence of instructions: $P'_{t} \in P' = ( 
+I(p^{t}_{1}), p^{t}_{1}, \ldots, I(p^{t}_{k_{t}}), p^{t}_{k_{t}} )$.
 $I(p^{t}_{j})$ sets $LWT[m] = (t,p^{t}_{j})$ if and only if $p^{t}_{j} =
 Write(m)$ and is a no-op otherwise.  This reasoning shows our \lwt is both
 sound, complete, and thus correct.
@@ -746,7 +751,7 @@ program starts via a configuration stored in the environment.  Trap handlers
 may contain arbitrary application-specific code.  \ctraps defines a trap
 handling API.  Trap handlers are passed the four pieces of information passed
 to the trap hook, as well as the \lwt's record of the program point and thread
-identifier of the last write to the involved memory location.
+identifier of the last write to the involved location.
 
 %\begin{figure}[htb]
 %\centering
@@ -854,7 +859,7 @@ need to build an entire concurrency analysis from scratch.
 
 We implemented last writer slicing and \ctraps.  We built our compiler support
 as a plugin for GCC ({\tt gcc-4.7.0 20111112}).  We used GCC's points-to and
-escape analysis support to prune instrumentation to non-escaping memory
+escape analysis support to prune instrumentation on accesses to non-escaping memory
 locations.  Our compiler instruments calls to {\tt free} and {\tt delete} as
 writes to the pointer being deallocated.  Our analysis handles all code
 compilable using this version of GCC except for a few cases: we do not handle
@@ -886,11 +891,11 @@ the GCC development community and downloads from interested developers.
 \label{sec:eval}
 We evaluated last writer slices and \ctraps along several axes.  We show that
 last writer slices provide information that is useful during debugging in
-Section~\ref{sec:eval:debugging} looking at a set of buggy programs and
+Section~\ref{sec:eval:debugging}, looking at a set of buggy programs and
 comparing to prior work.  We evaluate our performance overheads and
 show that last writer slices and \ctraps are feasible for use in deployed
 systems for a majority of workloads we studied.  We then characterize our
-instrumentation and discuss sources run time overhead.   We
+instrumentation and discuss sources of run time overhead.   We
 show that \ctraps is useful by implementing two existing applications and
 analyzing their performance.    
 
@@ -903,7 +908,7 @@ literature.  Table~\ref{tab:bugs} provides an overview of this evaluation and
 Section~\ref{sec:eval:debugging:cases} looks in detail at several cases to 
 better illustrate how last writer slices helps with debugging.
 
-In Table~\ref{tab:bugs}, we show the bugs we studied describing the program,
+In Table~\ref{tab:bugs}, we show the bugs we studied, describing the program,
 bug type, and bug report identifier where applicable.  For each bug, we
 followed the procedure for installation and bug triggering described by the
 author of~\cite{concurrencybugs}.  We study a mixture of concurrency bug types
@@ -915,15 +920,15 @@ benefits.  We mirror the evaluation strategy of bad value origin
 tracking~\cite{badapples}, as it is the only other low-overhead provenance
 tracking mechanism we know of.  We evaluate our system using their three
 evaluation criteria - (1) {\bf effectiveness}, (2) {\bf triviality}, and (3)
-{\bf usefulness}.  Our technique is {\bf effective} if the last writer slice
-reports a code point that wrote a value that subsequently caused a failure.  A
-failure is {\bf trivial} to debug if its cause is made obvious by examining the
-core dump alone, {\em i.e.}, a last writer slice is unnecessary.  A last writer
-slice is {\bf useful} if it is effective and the thread and code point in the
-slice help understand why the failure occurred or how to fix it.   We directly
-compare to bad value origin tracking.    The {\bf O.T.} column in
-Table~\ref{tab:bugs} shows  whether their analysis could help debug each bug,
-based on the description of their technique.
+{\bf usefulness}.  Our technique is {\bf effective} if it tracks a correct last
+writer slice for the value or values involved in causing the failure.  A failure is {\bf
+trivial} to debug if its cause is made obvious by examining the core dump
+alone, {\em i.e.}, a last writer slice is unnecessary.  A last writer slice is
+{\bf useful} if it is effective and the thread and code point in the slice help
+understand why the failure occurred or how to fix it.   We directly compare to
+bad value origin tracking.    The {\bf O.T.} column in Table~\ref{tab:bugs}
+shows  whether their analysis could help debug each bug, based on the
+description of their technique.
 
 \begin{table}
 \scriptsize
