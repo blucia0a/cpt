@@ -1371,7 +1371,16 @@ We characterized the instrumentation pruned by escape analysis.  We report our
 results in Table~\ref{tab:char}.  The table shows the percent of
 instrumentation sites pruned and the absolute number of sites in parenthesis.
 
-\begin{table}
+
+The data show that escape analysis can prove a substantial fraction of
+operations are local and do not require instrumentation.  Across PARSEC,
+between 8\% and 30\% of accesses were proved local.  In the server programs, a
+larger proportion of accesses were able to be proved local (21\% -- 66\%).  The
+difference is likely due to the fact that server threads perform more
+independent work (as discussed in Section~\ref{sec:eval:parsecserver}).
+Eliminating instrumentation using escape analysis is key to high performance.  
+
+\begin{table}[htb]
 \centering
 \small
 \begin{tabular}{l | r r }
@@ -1397,21 +1406,13 @@ swaptions      &   8.3\% &(19)                    \\
 \caption{\label{tab:char}Instrumentation pruned by static analysis.}
 \end{table}
 
-The data show that escape analysis can prove a substantial fraction of
-operations are local and do not require instrumentation.  Across PARSEC,
-between 8\% and 30\% of accesses were proved local.  In the server programs, a
-larger proportion of accesses were able to be proved local (21\% -- 66\%).  The
-difference is likely due to the fact that server threads perform more
-independent work (as discussed in Section~\ref{sec:eval:parsecserver}).
-Eliminating instrumentation using escape analysis is key to high performance.  
-
 
 \section{Related Work}
 
 \paragraph{Debugging with Data Provenance Information}
 The most related prior work looked at using various forms of provenance information for debugging.
 
-We have discussed bad value origin tracking ~\cite{badapples} throughout this
+We have discussed bad value origin tracking~\cite{badapples} throughout this
 work and compared directly with that technique in our evaluation.  Bad value
 origin tracking is like our work because they store provenance information to
 be used for debugging -- a similar goal to ours.  Bad value origin tracking
@@ -1451,9 +1452,9 @@ Thin Slicing~\cite{thinslicing}, is a slicing technique that is related to our
 work.  Thin Slicing yields the set of statements that computed on or wrote
 values that influenced a particular variable's value (the ``seed'').  Thin
 Slicing is similar in that its slices provide provenance and it excludes
-control information like our work.  Thin Slicing is different in that it has
+most control information like our work.  Thin Slicing is different in that it has
 overheads too high for production and focused on minimizing the size 
-of each slice. 
+of each slice compared to prior slicing techniques. 
 
 
 \paragraph{Communication Tracking in Concurrent Programs}
