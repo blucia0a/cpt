@@ -242,24 +242,80 @@ mod_mem_cache.c:287
 
 
 
-
-Apache 45606 - Not effective
-
----Type <return> to continue, or q <return> to quit---q
-#1  0x00007ffff71d7b8b in abort () from /lib/x86_64-linux-gnu/libc.so.6
-#2  0x0000000000440603 in ap_log_assert (
-    szExp=szExp@entry=0x48f278 "!((queue)->nelts == (queue)->bounds)", 
-    szFile=szFile@entry=0x48f258 "fdqueue.c", nLine=nLine@entry=307)
-    at log.c:868
-#3  0x0000000000472a00 in ap_queue_push (queue=0x731468, sd=0x7fffd800cf98, 
-    p=0x7fffd800cf18) at fdqueue.c:307
-
-(gdb) print /x LWT_table[ ((unsigned long) &(queue->nelts)) & 0xffffff]
-$28 = 0x5000000472a45
-(gdb) print /x myTid
-$29 = 0x5000000000000
+Transmission --
+-----------------------------
+Failing run:
+#1  0x00007ffff6bdcb8b in abort () from /lib/x86_64-linux-gnu/libc.so.6
+#4  0x000000000041f69c in allocateBandwidth (b=b@entry=0x0, 
+    dir=dir@entry=TR_CLIENT_TO_PEER, period_msec=period_msec@entry=500, 
+    peer_pool=peer_pool@entry=0x7fffe4000930) at bandwidth.c:251
+#5  0x000000000041fe98 in tr_bandwidthAllocate (b=0x0, 
+    dir=dir@entry=TR_CLIENT_TO_PEER, period_msec=period_msec@entry=500)
+    at bandwidth.c:307
+#6  0x00000000004297e2 in bandwidthPulse (vmgr=0x671dc0) at peer-mgr.c:2336
+...
+(gdb) inspect b
+$2 = (tr_bandwidth *) 0x0
 (gdb) 
 
-The problem is that the thread that failed was the last one to write to the
-variable in the exception. 
+
+Non-failing run:
+(gdb) break bandwidth.c:251
+(gdb) print /x LWT_table[&(b->magicNumber)]
+$17 = 0x100000041fb00
+(gdb) print /x myTid
+$18 = 0x2000000000000
+(gdb) info line *0x41fb00
+Line 135 of "bandwidth.c" starts at address 0x41fb00 <tr_bandwidthNew+137>
+   and ends at 0x41fb18 <tr_bandwidthNew+161>.
+(gdb) 
+
+
+
+
+Apache-45605
+------------
+
+(gdb) print /x myTid
+$6 = 0x5000000000000
+(gdb) print /x LWT_table[ &worker_queue_info->idlers ]
+$7 = 0x6000000472814
+(gdb) print /x worker_queue_info->idlers
+$8 = 0xfffffffe
+(gdb) print /x worker_queue_info->max_idlers
+$9 = 0x3
+(gdb) print /x LWT_table[ &worker_queue_info->idlers ]
+$10 = 0x6000000472814
+(gdb) info line *0x472814
+Line 191 of "fdqueue.c"
+   starts at address 0x4727f6 <ap_queue_info_wait_for_idler+129>
+   and ends at 0x472822 <ap_queue_info_wait_for_idler+173>.
+(gdb) print /x myTid
+$11 = 0x5000000000000
+(gdb) where
+#0  0x00007ffff756b9fa in __lll_unlock_wake ()
+   from /lib/x86_64-linux-gnu/libpthread.so.0
+#1  0x00007ffff7568104 in _L_unlock_644 ()
+   from /lib/x86_64-linux-gnu/libpthread.so.0
+#2  0x00007ffff7568063 in pthread_mutex_unlock ()
+   from /lib/x86_64-linux-gnu/libpthread.so.0
+#3  0x00007ffff799b824 in apr_thread_mutex_unlock (mutex=<optimized out>)
+    at locks/unix/thread_mutex.c:121
+#4  0x0000000000472762 in ap_queue_info_set_idle (queue_info=0x731588, 
+    pool_to_recycle=pool_to_recycle@entry=0x7fffd8004b98) at fdqueue.c:133
+#5  0x000000000047088d in worker_thread (thd=0x7316f0, dummy=<optimized out>)
+    at worker.c:844
+#6  0x00007ffff79a9ca6 in dummy_worker (opaque=<optimized out>)
+    at threadproc/unix/thread.c:142
+#7  0x00007ffff7564e9a in start_thread ()
+   from /lib/x86_64-linux-gnu/libpthread.so.0
+#8  0x00007ffff72913fd in clone () from /lib/x86_64-linux-gnu/libc.so.6
+#9  0x0000000000000000 in ?? ()
+(gdb) 
+
+The above shows that when the failure occurs, the value of idlers visible in
+the worker threads is 0xfffffffe -- an underflow.  That's bad, but it doesn't
+say where that value came from.  The last writer slice for the queue->idlers
+shows that the listener decremented it, writing it last, and that it did so
+in ap_queue_info_wait_for_idler at line 191 of fdqueue.c, "apr_atomic_dec32(&(queue_info->idlers));"
 

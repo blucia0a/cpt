@@ -841,19 +841,19 @@ recorded edges is the tool's output.  Our \ctraps implementation of
 communication graphs took about 50 lines of code (including output formatting
 code). 
 
-\paragraph{Other Applications}
-In addition to those applications, we envision that a variety of applications
-will be enabled by our simple interface.  Anomaly detection and ``likely
-invariant'' techniques similar to AVIO~\cite{avio}, Daikon~\cite{daikon}, and
-others are a natural fit for \ctraps.  \ctraps provides the support necessary
-for implementing specification checkers for specifications related to
-inter-thread communication~\cite{velodrome,oshajava}.  Guided testing
-tools~\cite{cuzz,chess} and bug detection tools~\cite{ctrigger} focused on
-concurrency could also be implemented as \ctraps applications.  \ctraps also
-provides an interesting platform for developing new approaches to
-record/replay~\cite{chimera,fdr}.  \ctraps is an enabling platform for
-developing these or other analyses with low baseline overheads and without the
-need to build an entire concurrency analysis from scratch.
+%\paragraph{Other Applications}
+%In addition to those applications, we envision that a variety of applications
+%will be enabled by our simple interface.  Anomaly detection and ``likely
+%invariant'' techniques similar to AVIO~\cite{avio}, Daikon~\cite{daikon}, and
+%others are a natural fit for \ctraps.  \ctraps provides the support necessary
+%for implementing specification checkers for specifications related to
+%inter-thread communication~\cite{velodrome,oshajava}.  Guided testing
+%tools~\cite{cuzz,chess} and bug detection tools~\cite{ctrigger} focused on
+%concurrency could also be implemented as \ctraps applications.  \ctraps also
+%provides an interesting platform for developing new approaches to
+%record/replay~\cite{chimera,fdr}.  \ctraps is an enabling platform for
+%developing these or other analyses with low baseline overheads and without the
+%need to build an entire concurrency analysis from scratch.
 
 \section{System Implementation}
 
@@ -935,12 +935,13 @@ description of their technique.
 \centering
 \begin{tabular}{l|ll|l|ccc|c}
 {\bf App} & {\bf Ver. \#} & {\bf Bug \#} &{\bf Type} & {\bf Eff.?} & {\bf Triv.?} & {\bf Usef.?} & {\bf O.T.?}\\ \hline
-mysql  &  4.0.12 &  791     & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
-pbzip2 &  0.9.4  &  N/A     & Order  &Yes  &No    & Yes   & Yes \\
-httrack& 3.43.9  &  N/A     & Order  &Yes  &No    & Yes   & No  \\%Used w/o origin - no help
-jdk1.4 &  1.70   &          & Atom.  &Yes  &No    & Yes   & No  \\%All values usable
-apache&  2.0.48 &  21285   & Atom.  &Yes  &No    & Yes   & Maybe\\%All values usable
-%apache2&  2.2.9  &  45605   & Atom.  &Yes  &No    & Maybe & ??  \\
+jdk1.4 &  1.70   &  N/A     & Atom.  &Yes  &No    &Yes   & No  \\%All values usable
+pbzip2 &  0.9.4  &  N/A     & Order  &Yes  &No    &Yes   & Yes \\
+httrack& 3.43.9  &  N/A     & Order  &Yes  &No    &Yes   & No  \\%Used w/o origin - no help
+transmission & 1.42 & N/A   & Order  &Yes  &No    &Yes   & No  \\
+mysql  &  4.0.12 &  791     & Atom.  &Yes  &No    &Yes   & No  \\%All values usable
+apache1&  2.0.48 &  21285   & Atom.  &Yes  &No    &Yes   & Some \\%All values usable
+apache2&  2.2.9 &  45605    & Atom.  &Yes  &No    &Some  & No \\%All values usable
 \end{tabular}
 \caption{\label{tab:bugs}{\bf Concurrency debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
 \normalsize
@@ -975,7 +976,7 @@ this bug, when one thread deletes a variable, it makes that variable unusable
 and bad value origin tracking would track that value.  When the failure occurs,
 the programmer would then know why the value was deleted.  
 
-For {\tt apache}, bad value origin tracking may help.  The bug is an atomicity
+For {\tt apache1}, bad value origin tracking may help.  The bug is an atomicity
 violation that leads to a double free.  Two threads manipulate an object's
 reference count and deallocate the object when the count hits zero. Zero-checks
 and deallocation should be atomic, but the code does not ensure they are.  If
@@ -1112,7 +1113,32 @@ be atomic with respect to the insert code to prevent this failure.  Bad value
 origin tracking does not help debug this bug because {\tt log\_type} only ever
 contains usable values so it would not be tracked.  
 
+\paragraph{apache2}
+We used last writer slices to debug an atomicity violation in Apache-2.2.9 and
+we found that last writer slices help understand the bug, but not how to fix
+it.  The bug involves a group of worker threads that handle web requests and a
+network listener thread that passes requests to the workers.  The queue tracks
+the number of idle workers.  When a worker becomes idle, it increments the
+number of idlers and when the listener passes work to a worker, it decrements
+that number.  The counter's increments and decrements are synchronized using
+condition variables.  If there are no idlers, the listener waits for a signal.
+When a worker becomes idle when no others are, it delivers a signal to the
+listener.
 
+The problem is that the listener does not check the condition governed by the
+condition variable after being signaled on that condition variable.  As a
+result, the listener can incorrectly decrement the idler count twice,
+underflowing the unsigned value, which then causes an assertion to fail.  When
+the failure occurs, the core dump shows the idler count underflowed, revealing
+a primary symptom of the bug, but not providing much help.  We checked the last
+writer slice for the idler count and it reported that the listener thread last
+wrote the idler count at its decrement.  That information shows the programmer
+{\em why} the underflow occurred, which is helpful for understanding the
+failure.  However, we conclude that last writer slices are only somewhat 
+useful in this case.  Solving this complex bug requires understanding not just
+the connection between the underflow and the listener's decrement, but also the
+synchronization protocol that coordinates that decrement and other accesses to
+the variable.  
 
 \subsection{Performance Evaluation: Setup and Benchmarks}
 
