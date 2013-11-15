@@ -82,7 +82,7 @@ have undesirable consequences, like crashing or degrading performance.
 A value's provenance is a description of the reason that it is stored in a
 variable. Provenance information helps answer the question: "Why does this
 variable contain this value?", which is central to debugging. Debugging a
-concurrent program requires understanding how threads interact, and since
+concurrent program requires understanding how threads interact, and because  
 communication happens via reads and writes to shared variables, {\em data
 provenance information is essential}. Provenance can take on many forms, for
 example, a value's provenance could be the instruction that wrote it, the
@@ -92,7 +92,7 @@ thread that produced it.
 %During debugging provenance helps a programmer better understand not just where failures occur, but where values came from, connectng disparate
 %parts of a program that interact, leading to a failure.
 
-Collecting debugging information, like data provenance, from production
+Efficiently collecting debugging information, like data provenance, from production
 systems is particularly important for concurrent software since bugs
 manifest as failures rarely. When a production system fails and a programmer
 receives a bug report, reproducing the reported failure to collect provenance
@@ -302,8 +302,7 @@ overheads low enough for use in deployment (0--15\%).}
 In this section we discuss debugging with data dependence information, using an
 example, in order to motivate collecting last writer slices in deployed
 systems.  We then provide context for \ctraps by discussing some more
-sophisticated concurrency analyses that rely on the kind of dependence
-information we are focusing on in this work.
+sophisticated concurrency analyses that rely on last writer information.
 
 %Many systems that support programming and execution models, debugging tools,
 %and other software engineering tools track dynamic memory dependences during a
@@ -493,7 +492,7 @@ bug's cause.
 \centering
 \includegraphics[width=\columnwidth]{figs/JDKStringBufferDebug2.pdf}
 \caption{\label{fig:jdklws}{\bf Using last writer slices to debug an
-ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the interaction between the erase function and the append function that leads to a failure.}
+ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the buggy interaction between {\tt erase()} and {\tt append()}.}
 \end{figure}
 
 
@@ -503,8 +502,8 @@ the execution, the \lwt is saved and can be sent to the programmer with the
 core dump.  Capturing good debugging information is especially important for
 concurrency bugs that manifest very rarely or in the presence of only peculiar
 real-world inputs.  A primary goal of this work is to show that we can collect
-last writer slices with overheads that are low enough for production use so
-they can be included pervasively in bug reports.
+last writer slices with very low overheads so they can be included pervasively
+in bug reports.
 
 %We discuss last writer slices in more depth by first describing our run time
 %support for collecting them.  The system support consists of a runtime library
@@ -568,14 +567,13 @@ $LWS[m]$ -- the Last Writer Slice for memory location $m$.   At any point $Q$,
 $LWS[m]$ holds $(t,p^{t}_{\ell w})$, where $p^{t}_{\ell w} = max_{\ell}( 
 q_{\ell} = Write(m) \in Q)$ and $t$ is the thread that
 executed $p^{t}_{\ell w}$. Informally, $p^{t}_{\ell w}$ is the last instruction
-in $Q$ to write $m$ and $t$ is the thread that executed it.  For a
-never-written location $n$, $LWS[n] = (\emptyset,\emptyset)$ indicating it is
-unwritten.
+in $Q$ to write $m$ and $t$ is the thread that executed it.  For an
+unwritten location $n$, $LWS[n] = (\emptyset,\emptyset)$.
 
 For our design to be correct, $LWT[m]$, the entry for a memory location $m$ in
 our \lwt implementation, must be the same as $LWS[m]$ at all points in an
 execution.  Correctness in the \lwt requires {\em soundness} and {\em
-completeness}.  A {\em sound} design only updates $LWT[m]$ when $m$ is written.
+completeness}.  A {\em sound} design updates $LWT[m]$ only when $m$ is written.
 A {\em complete} design always updates $LWT[m]$ when $m$ is written.  Our
 compiler inserts \lwt updates before every write operation (for completeness)
 and only before write operations (for soundness).  Formally, given a program,
@@ -587,8 +585,8 @@ Write(m)$ and is a no-op otherwise.  This reasoning shows our \lwt is both
 sound, complete, and thus correct.
 
 Next we discuss two nuances of our design: (1) the interaction of our \lwt
-implementation with code containing data-races; and (2) the correctness of the
-\lwt when a program addresses data that overlap in memory. 
+implementation with data-races; and (2) the correctness of the
+\lwt for accesses to overlapping memory regions. 
 
 \paragraph{Consistency and Atomicity}
 
@@ -647,27 +645,22 @@ only when accesses to the same data occur within a very short time interval,
 which is uncommon, {\em and} an unserializable interleaving of accesses and
 \lwt updates also occurs.
 
-
-
-
-
 \paragraph{Non-overlapping Memory References} 
-We assume each written memory location corresponds to a non-overlapping memory
-region because our \lwt design is {\em granularity oblivious}.  We discuss this
-issue informally due to space constraints.  Each \lwt entry corresponds to a
-memory location referenced by a program instruction.  Two instructions might
-reference different locations that overlap because the referenced locations
-have different granularities ({\em e.g.}, accessing a byte that is part of a
-previously accessed word).  When that happens, both accesses update different
-\lwt entries, because they reference different locations.  However, the
-overlapping region then has two different entries reflecting the last {\em two}
-updates to its parts rather than just its last write.
+We assume written memory locations do not overlap in memory because our \lwt
+design is {\em granularity oblivious}.  We discuss this issue informally due to
+space constraints.  Each \lwt entry corresponds to a location that was written.
+Two instructions might reference different locations that overlap because the
+referenced locations have different granularities ({\em e.g.}, accessing a byte
+that is part of a previously accessed word).  When that happens, both accesses
+update different \lwt entries, because they reference different locations.
+However, the overlapping region then has two different entries reflecting the
+last {\em two} updates to its parts rather than just its last write.
 
 The \lwt remains correct, assuming the program only accesses non-overlapping
 regions.  In programs that access overlapping regions, there is always some
 entry in the \lwt that correctly reflects each memory location's last writer.
-However, the entry for a coarse-grained region may be obsolete because of an
-access to an overlapping sub-region.
+However, the coarse region's entry may be stale because of an
+access to an overlapping region.
 
 One approach to mitigating this issue would be to allocate \lwt entries for
 regions of fixed granularity.  We chose not to do so for two reasons.  First,
@@ -838,8 +831,7 @@ collection using \ctraps.  When a trap is delivered, our implementation records
 communication graph edges composed of the code point of the last writer to the
 location being accessed and the code point of the trapping access.  The set of
 recorded edges is the tool's output.  Our \ctraps implementation of
-communication graphs took about 50 lines of code (including output formatting
-code). 
+communication graphs took about 50 lines of code. 
 
 %\paragraph{Other Applications}
 %In addition to those applications, we envision that a variety of applications
@@ -856,9 +848,9 @@ code).
 %need to build an entire concurrency analysis from scratch.
 
 \section{System Implementation}
-
+\label{sec:implementation}
 We implemented last writer slicing and \ctraps.  We built our compiler support
-as a plugin for GCC ({\tt gcc-4.7.0 20111112}).  We used GCC's points-to and
+as a plugin for GCC ({\tt gcc-4.7}).  We used GCC's points-to and
 escape analysis support to prune instrumentation on accesses to non-escaping memory
 locations.  Our compiler instruments calls to {\tt free} and {\tt delete} as
 writes to the pointer being deallocated.  Our analysis handles all code
@@ -868,24 +860,23 @@ are undocumented, we do not handle inlined assembly instructions, and we do not
 handle C++ exceptions.  Note that these limitations of our research prototype
 are not fundamental and the limited cases are uncommon.   
 
-We built our runtime system from scratch.  We implemented the LWT as a fixed
-size 2GB array of 64-bit words, fixing our memory overheads.  Each entry packs a program point and a thread
-identifier into the 64-bit word.  By default, program points are single
-instruction addresses, but we also support limited (2-address)
-context-sensitivity by packing the current instruction's address and the
-nearest return address into a 64-bit LWT entry. When an access to a memory
-location occurs, we index into the LWT with the lower bits of the location's
-address.  Our prototype implementation uses a lossy resolution policy for hash
-collisions.  We use this policy in our prototype because it is faster and
-simpler than a chaining concurrent hash table implementation.  Collisions are
-extremely rare, so this simplification is unlikely to be a problem even in a
-more industrial strength implementation.  
+We built our runtime system from scratch.  The LWT is a fixed size 2GB array of
+64-bit words.  Each entry packs a program point and a thread identifier into
+the 64-bit word.  By default, program points are single instruction addresses,
+but we also support limited (2-address) context-sensitivity by packing the
+current instruction's address and the nearest return address into a 64-bit LWT
+entry. When an access to a memory location occurs, we index into the LWT with
+the lower bits of the location's address.  Our prototype implementation uses a
+lossy resolution policy for hash collisions.  We use this policy in our
+prototype because it is fast and bounds memory overheads at 2GB.  Collisions
+are rare (see Section~\ref{sec:eval:performance:collisions}), so this
+simplification is unlikely to be a problem.  
 
 \subsection{Release}
 We released our implementation, free and open-sourced, on the
 web~\cite{ctrapsrelease} and published it to the GCC plugin repository.
 Since its release, we have seen contributions to our codebase from members of
-the GCC development community and downloads from interested developers.
+the GCC community and downloads from interested developers.
 
 \section{Evaluation}
 \label{sec:eval}
@@ -954,7 +945,7 @@ the failure, so last writer slicing was effective.  We found that none of the
 failures we looked at were trivially debuggable.  This finding is consistent
 with the difficulty of debugging concurrency bugs -- the core dump does not
 reveal the interaction between threads that led to a failure, only the result
-of the interaction, which leads to the failure.  
+of the interaction.  
 
 Last writer slices were useful for helping understand how to fix the bug in
 all but one case and useful at least for understanding the bug in the
@@ -963,7 +954,7 @@ is that they reveal the connection between code running in different threads
 that interacts to cause a failure.  Without last writer slices, programmers
 have no easy way of connecting these otherwise disparate parts of a program.
 The case studies in Section~\ref{sec:eval:debugging:cases} show in more detail
-how last writer slices are useful for debugging.
+how last writer slices are useful for debugging and illustrate their limitations.
 
 
 %For the remaining case, {\tt apache2}, last writer slices would
@@ -971,7 +962,7 @@ how last writer slices are useful for debugging.
 %complex, multi-variable bug.  We provide more detail on {\tt apache2} in
 %Section~\ref{sec:eval:debugging:cases}.
 Our evaluation shows that bad value origin tracking~\cite{badapples} is
-definitely helpful in one case where last writer slices is useful and may help
+helpful in one case where last writer slices is useful and provides limited help
 in one other case.  For a use-after-delete bug in {\tt pbzip2}, bad value
 origin tracking helps.  For this bug, when one thread deletes a variable, it
 makes that variable unusable and bad value origin tracking would track that
@@ -1098,7 +1089,7 @@ We used last writer slices to debug an atomicity violation in MySQL-4.0.12 that
 is a critical security vulnerability.  Figure~\ref{fig:mysqllws} shows the
 buggy code.  Thread 1 rotates the database's log file.  Log rotation should be
 atomic, but the lack of synchronization allows Thread 2 to run its insert
-during log rotation.  In that case, the insert query not logged, manifesting
+during log rotation.  In that case, the insert query is not logged, manifesting
 the failure.  We added an {\tt abort} statement to the non-logging case because
 this behavior is a security vulnerability that the bug report describes as
 ``critical''.  Adding the {\tt abort} is reasonable, as the bug report
@@ -1127,9 +1118,9 @@ contains usable values so it would not be tracked.
 
 \paragraph{apache2}
 We used last writer slices to debug an atomicity violation in Apache-2.2.9 and
-we found that last writer slices help understand the bug, but not how to fix
+we found that last writer slices help understand the bug, but not fully how to fix
 it.  The bug involves a group of worker threads that handle web requests and a
-network listener thread that passes requests to the workers.  The queue tracks
+network listener thread that passes requests to the workers.  The server tracks
 the number of idle workers.  When a worker becomes idle, it increments the
 number of idlers and when the listener passes work to a worker, it decrements
 that number.  The counter's increments and decrements are synchronized using
@@ -1142,9 +1133,9 @@ condition variable after being signaled on that condition variable.  As a
 result, the listener can incorrectly decrement the idler count twice,
 underflowing the unsigned value, which then causes an assertion to fail.  When
 the failure occurs, the core dump shows the idler count underflowed, revealing
-a primary symptom of the bug, but not providing much help.  We checked the last
-writer slice for the idler count and it reported that the listener thread last
-wrote the idler count at its decrement.  That information shows the programmer
+a primary symptom of the bug, but not providing much help.  The last
+writer slice for the idler count reports that the listener thread last
+wrote the idler count at its decrement operation.  That information shows the programmer
 {\em why} the underflow occurred, which is helpful for understanding the
 failure.  However, we conclude that last writer slices are only somewhat 
 useful in this case.  Solving this complex bug requires understanding not just
@@ -1234,8 +1225,8 @@ that is likely acceptable for production use (averaging 38\%).  The difference
 indicates that these programs perform relatively more reads than other
 applications, experiencing more overhead due to \ctraps's read instrumentation.
 
-These high-level results support our main claim that the runtime overhead of
-\ctraps is low enough for deployed systems for many applications, especially
+These high-level results support our claim that our overheads 
+are low enough for deployed systems for many applications, especially
 for servers.  We now further analyze our observed overheads, illuminating
 differences between the lower-overhead server programs and the higher-overhead
 PARSEC programs.
@@ -1261,20 +1252,19 @@ instrumentation.  The program's overhead dropped from about 420\% overhead for
 300\% to about 130\% overhead.  We also looked at an output matrix passed into
 the inner-loop function.  The matrix is allocated and deallocated in the
 inner-loop's caller, but is never shared.  Eliminating instrumentation on
-accesses to this matrix yielded an overhead of about 46\% for \ctraps, and to
+accesses to this matrix yielded an overhead of 46\% for \ctraps and 
 just 30\% for last writer slicing.  
 
 These manual improvements to the escape analysis reduced the run time overheads
 for these workloads from being unacceptable for any production environment to
-being reasonable for use in production systems.  We expect a more sophisticated
-escape analysis would find these local accesses and achieve these performance
-gains automatically.
+being reasonable for use in production systems. Better escape analysis would
+find these performance gains automatically.
 
 
 \subsubsection{PARSEC vs. Servers}
 \label{sec:eval:parsecserver}
-In our tests, server programs were better able to tolerate the overhead of
-last writer slices and \ctraps.   We discern three reasons for this difference.
+We discern three reasons that server programs better tolerated the overheads of
+last writer slices and \ctraps in our experiments.
 
 \paragraph{Independent Parallelism}
 In most cases, the servers we evaluated have abundant, completely independent
@@ -1330,8 +1320,21 @@ We briefly evaluated the cost of context-sensitivity using \ctraps with no-op
 trap handlers.  With a bounded 2-address context, the average overhead for
 server programs was 18\% and the average overhead for PARSEC was 145\%.  These
 data show that a restricted form of context-sensitive analysis is possible in
-\ctraps with overheads low enough for production.  
+\ctraps with overheads low enough for production in some cases.
 
+\subsection{Memory Overheads}
+\label{sec:eval:performance:collisions}
+As we describe in Section~\ref{sec:implementation} our prototype \lwt is a 2GB
+hashtable of 8 byte entries.  We use a lossy hash collision policy: all updates
+always overwrite existing entries.  This strategy fixes memory overheads at
+2GB, but frequent lossy collisions may lead to imprecision.   We instrumented
+our runtime to count collisions and found that for PARSEC applications the
+geometric mean rate of collisions was very low - 89 per 10,000 memory accesses.
+This summary result shows that our prototype implementation is reasonable,
+especially for debugging in production, when low memory use is key and minor
+imprecision is tolerable.  Note that collisions did not introduce noticable
+imprecision in our debugging experiments.  When precision is more important than memory overhead, ({\em
+e.g.}, for sound, offline analysis), a lossless hashtable is a better option.  
 
 \subsection{Evaluating CTraps Applications}
 \label{sec:appperf}
@@ -1341,7 +1344,7 @@ overheads that scale with their analysis complexity.  In several cases -- most
 notably, in tests with our server benchmarks -- their overhead is low enough
 for production use.  
 
-\subsubsection{Performance with \ctraps}
+\subsubsection{Performance with \ctraps Applications}
 
  Figure~\ref{fig:perfapps} shows the performance overheads of
 our implementation as the slowdown with respect to the natively executing
@@ -1523,14 +1526,17 @@ general instrumentation systems, programmers write that code from scratch at
 their own risk.  
 
 \section{Conclusions}
-Last writer slices are the first system to collect a general form of data provenance information for concurrent programs with overheads low enough for production use. 
+In this work we proposed last writer slicing, the first technique to collect data provenance information
+that is not limited to certain values, is targeted to concurrent programs, and
+has overheads low enough for production use, especially in server programs. 
 
 We developed system support that collects last writer slices with overheads
-well within an acceptable range for production.  We showed that, during
-debugging, the provenance information provided by last writer slices reveals
-crucial connections between different threads' otherwise disparate regions of
-code.  Understanding how code in different threads interacts is essential to
-concurrency debugging and this work helps with that understanding.
+well within an acceptable range for always-on use in production.  We showed
+that during debugging, the provenance information provided by last writer
+slices reveals crucial connections between different threads' otherwise
+disparate regions of code.  Understanding how code in different threads
+interacts is essential to concurrency debugging and this work aids that
+understanding.
 
 Using last writer slices, we then built \ctraps, an extensible framework for
 implementing concurrent program analyses that interpose on inter-thread
@@ -1538,7 +1544,6 @@ communication.  Trap handlers implement such analyses in just a few lines of
 code.  We showed that it is possible to build useful analyses using \ctraps
 that are efficient enough for deployment use in an important set of programs
 ({\em e.g.}, servers, key-value stores, databases, {\em etc.}).  
-
 
 An interesting direction for future work is to evaluate the role of minimal
 hardware support for \ctraps.  We will also further study the impact of
