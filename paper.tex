@@ -903,7 +903,7 @@ analyzing their performance.
 \label{sec:eval:debugging}
 
 We illustrate the debugging benefits of last writer slices by using our system
-to debug five real-world programs studied previously in the debugging
+to debug several real-world programs studied previously in the debugging
 literature.  Table~\ref{tab:bugs} provides an overview of this evaluation and
 Section~\ref{sec:eval:debugging:cases} looks in detail at several cases to 
 better illustrate how last writer slices helps with debugging.
@@ -926,7 +926,7 @@ trivial} to debug if its cause is made obvious by examining the core dump
 alone, {\em i.e.}, a last writer slice is unnecessary.  A last writer slice is
 {\bf useful} if it is effective and the thread and code point in the slice help
 understand why the failure occurred or how to fix it.   We directly compare to
-bad value origin tracking.    The {\bf O.T.} column in Table~\ref{tab:bugs}
+bad value origin tracking~\cite{badapples}.    The {\bf O.T.} column in Table~\ref{tab:bugs}
 shows  whether their analysis could help debug each bug, based on the
 description of their technique.
 
@@ -949,32 +949,34 @@ apache2&  2.2.9 &  45605    & Atom.  &Yes  &No    &Some  & No \\%All values usab
 
 The results in Table~\ref{tab:bugs} show that for both atomicity and ordering
 violation bugs, last writer slices are effective.  In all cases, we found that
-the last writer slice revealed the provenance of the data involved in the
-operation that caused the failure, so last writer slicing was effective.  We
-found that none of the failures we looked at were trivially debuggable.  This
-finding is consistent with the difficulty of debugging concurrency bugs -- the
-core dump does not reveal the interaction between threads that led to a
-failure, only the result of the interaction, which leads to the failure.  
+the last writer slice revealed the provenance of at least some data involved in
+the failure, so last writer slicing was effective.  We found that none of the
+failures we looked at were trivially debuggable.  This finding is consistent
+with the difficulty of debugging concurrency bugs -- the core dump does not
+reveal the interaction between threads that led to a failure, only the result
+of the interaction, which leads to the failure.  
 
-Last writer slices were obviously useful in all five cases.  In these cases,
-the root cause of the bug becomes clear when last writer slices show the
-inter-thread data flow led to a variable having a value that caused a failure.
-Using that information, we expect it would be straightforward in these cases to
-add synchronization to fix these bugs.  Note that without last writer slices,
-understanding the responsible inter-thread data flow and fixing the bug would
-be difficult.  
+Last writer slices were useful for helping understand how to fix the bug in
+all but one case and useful at least for understanding the bug in the
+remaining case, {\tt apache2}.  The main reason last writer slices are helpful
+is that they reveal the connection between code running in different threads
+that interacts to cause a failure.  Without last writer slices, programmers
+have no easy way of connecting these otherwise disparate parts of a program.
+The case studies in Section~\ref{sec:eval:debugging:cases} show in more detail
+how last writer slices are useful for debugging.
+
 
 %For the remaining case, {\tt apache2}, last writer slices would
 %probably help with debugging, but it is less obvious because this bug is a
 %complex, multi-variable bug.  We provide more detail on {\tt apache2} in
 %Section~\ref{sec:eval:debugging:cases}.
-Our evaluation shows that bad value origin tracking~\cite{badapples} is not
-helpful in three out of five cases where last writer slices is useful.  
-There are two cases where bad value origin tracking may help.  For a
-use-after-delete bug in {\tt pbzip2}, bad value origin tracking helps.  For
-this bug, when one thread deletes a variable, it makes that variable unusable
-and bad value origin tracking would track that value.  When the failure occurs,
-the programmer would then know why the value was deleted.  
+Our evaluation shows that bad value origin tracking~\cite{badapples} is
+definitely helpful in one case where last writer slices is useful and may help
+in one other case.  For a use-after-delete bug in {\tt pbzip2}, bad value
+origin tracking helps.  For this bug, when one thread deletes a variable, it
+makes that variable unusable and bad value origin tracking would track that
+value.  When the failure occurs, the programmer would then know why the value
+was deleted.  
 
 For {\tt apache1}, bad value origin tracking may help.  The bug is an atomicity
 violation that leads to a double free.  Two threads manipulate an object's
@@ -999,8 +1001,10 @@ involved threads.
 \label{sec:eval:debugging:cases}
 
 We now provide detailed cases studies showing the debugging role of last writer
-slices in several of the bugs we examined.  Space constraints prevent us from
-providing details for all cases.
+slices in several of the bugs we examined.  
+
+%Space constraints prevent us from providing details for all cases.
+
 
 \paragraph{jdk-1.4}
 The running example in Figures~\ref{fig:coreDumpFail} and ~\ref{fig:jdklws},
@@ -1061,7 +1065,15 @@ nothing.  By contrast, comparing the last writer slices for the failing and
 non-failing executions reveals how to fix this bug.  
 
 
-
+\paragraph{transmission} We used last writer slices to debug a
+use-before-initialization bug in transmission-1.42.  We omit a full case study
+due to space constraints, but we mention a few notable properties of this case.
+First, like {\tt httrack}, we debug {\tt transmission} by comparing the last
+writer slice from failing and non-failing executions.  Second, last writer
+slices reveal all the code and data involved in this bug, making the bug and
+its fix clear.   Third, bad value origin tracking does not work in this case
+because in failing executions, the bad value has no origin and in non-failing
+executions, the involved variable holds only usable values.
 
 %
 %\paragraph{PBZip2}
@@ -1395,8 +1407,7 @@ important target than PARSEC for these types of analyses in production.
 \label{sec:char}
 We characterized the instrumentation pruned by escape analysis.  We report our
 results in Table~\ref{tab:char}.  The table shows the percent of
-instrumentation sites pruned and the absolute number of sites in parenthesis.
-
+calls pruned and the absolute number of sites in parenthesis.
 
 The data show that escape analysis can prove a substantial fraction of
 operations are local and do not require instrumentation.  Across PARSEC,
@@ -1436,7 +1447,7 @@ swaptions      &   8.3\% &(19)                    \\
 \section{Related Work}
 
 \paragraph{Debugging with Data Provenance Information}
-The most related prior work looked at using various forms of provenance information for debugging.
+Prior work has looked at various forms of data provenance for debugging.
 
 We have discussed bad value origin tracking~\cite{badapples} throughout this
 work and compared directly with that technique in our evaluation.  Bad value
@@ -1476,11 +1487,11 @@ dependences to identify which parts of a program might be relevant to a task
 
 Thin Slicing~\cite{thinslicing}, is a slicing technique that is related to our
 work.  Thin Slicing yields the set of statements that computed on or wrote
-values that influenced a particular variable's value (the ``seed'').  Thin
-Slicing is similar in that its slices provide provenance and it excludes
-most control information like our work.  Thin Slicing is different in that it has
-overheads too high for production and focused on minimizing the size 
-of each slice compared to prior slicing techniques. 
+values that influenced a ``seed'' variable's value.  Thin
+Slicing is similar to our work in that slices provide provenance and it excludes most
+control-flow information.  Thin Slicing is different in that it has
+overheads too high for production and focused on minimizing the size of each
+slice compared to prior slicing techniques. 
 
 
 \paragraph{Communication Tracking in Concurrent Programs}
@@ -1512,8 +1523,7 @@ general instrumentation systems, programmers write that code from scratch at
 their own risk.  
 
 \section{Conclusions}
-This work observes that we can collect a useful form of data provenance
-information with overheads low enough for use in deployed systems. 
+Last writer slices are the first system to collect a general form of data provenance information for concurrent programs with overheads low enough for production use. 
 
 We developed system support that collects last writer slices with overheads
 well within an acceptable range for production.  We showed that, during
