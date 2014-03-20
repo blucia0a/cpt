@@ -64,7 +64,7 @@ overheads by default and that overheads scale with analysis complexity.
 \end{abstract}
 
 \section{Introduction}
-Multi-threaded programming is challenging.  In contrast to sequential
+Multi-threaded programming is challenging.  In contrast to simple sequential
 reasoning, multi-threaded programs require complex reasoning about many threads
 of control and their interactions.  In shared memory programs, threads interact
 by reading and writing memory locations.  Threads' reads and writes interleave
@@ -1488,14 +1488,16 @@ slice compared to prior slicing techniques.
 Several techniques have been proposed analyze dependences and
 communication in concurrent programs.  
 
-A closely related recent effort in this space is Octet~\cite{octet} that
-captures inter-thread communication soundly and, like \ctraps, can be used to
-build dynamic concurrency analyses.  Octet differs from \ctraps in that it is
-sound and was built to support analyses on Java programs.  Additionally, Octet
-tracks the ``locality state'' of memory locations, rather than the last writer
-slice information.  Octet's average run time overhead (26\%) is comparable to
-the overhead of both last writer slicing and \ctraps and all three techniques
-have low enough overheads in many cases for production use.
+A closely related recent effort on dynamic dependence analysis is
+Octet~\cite{octet}, which captures inter-thread communication soundly and to
+aid in building arbitrary concurrency analyses. Octet tracks the ``locality
+state'' of memory locations to make dependence tracking efficient.   Octet
+differs from \ctraps in that it focuses on soundness, was built primarily to
+optimize dependence tracking, and does not discuss direct use of
+dependence information to help with debugging.  Octet's average run time
+overhead (26\%) is comparable to the overhead of both last writer slicing and
+\ctraps and Octet, last writer slicing, and \ctraps all have low enough
+overheads for production use in many cases.
 
 CCI~\cite{cci}, Bugaboo~\cite{bugaboo}, LBA~\cite{paralog}, Recon~\cite{recon},
 and DefUse~\cite{defuse} all explicitly track some thread interactions.  Unlike
