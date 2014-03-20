@@ -23,7 +23,7 @@
 \newcommand{\lwt}{LWT\xspace}
 
 
-\newcommand{\Caption}[1]{\begin{minipage}{1.0\columnwidth} \caption{#1} \end{minipage}}
+\newcommand{\Caption}[1]{\begin{minipage}{.95\columnwidth} \caption{#1} \end{minipage} \vspace{-1.2ex}}
 \newcommand{\CaptionWide}[1]{\caption{#1}\vspace{-2ex}}
 %\doublespacing
 \authorinfo{Anonymous for Submission}{}
@@ -85,7 +85,7 @@ Our approach to solving that problem is to provide the programmer with {\em
 provenance} information that can be examined alongside the program's memory
 state ({\em i.e.}, core dump).  A value's provenance describes why a memory
 location contains its value.  In this work we develop a new provenance tracking
-mechanism called {\em last writer slicing} that satisfies these goals.  A
+mechanism called {\em last writer slicing}.  A
 memory location's last writer slice is a record containing the program point
 and the identifier of the thread that last wrote data to that memory location.
 As the program executes in production, we collect last writer slices for each
@@ -121,19 +121,26 @@ more heavy-weight analyses in domains like bug detection ({\em e.g.},
 e.g.},~\cite{threadclustering, schedpredictionmodel}), and program
 understanding~\cite{oshatr}. 
 
-Motivated by these prior {\em ad hoc} efforts, we build a general mechanism
-called {\em Communication Traps} or {\em \ctraps} on top of last writer slices
-(Section~\ref{sec:ctraps}). \ctraps is useful for implementing dynamic
-concurrency analyses, like the ones discussed above.  \ctraps runs alongside a
-program and uses last writer slices to identify memory accesses that lead to
-{\em communication} between the threads. Communcation occurs when a thread
-accesses memory last written by a different thread and \ctraps delivers a {\em
-trap} to a thread when it communicates with another thread, giving it
-information about how communication occurred.  Programmer-defined {\em trap
-handlers} can implement arbitrary analysis using that information. By default,
-\ctraps has low overheads that are appropriate production in many cases.  As we
-show in our evaluation, the overhead of \ctraps applications scales with the
-complexity of their analysis.
+Motivated by these prior {\em ad hoc} efforts, we develop a dynamic analysis
+framework called {\em Communication Traps} or {\em \ctraps}.  \ctraps runs
+alongside a program and uses the provenance information provided by last writer
+slices to identify memory accesses that lead to {\em communication} between the
+threads. Communcation occurs when a thread accesses memory last written by a
+different thread and \ctraps delivers a {\em trap} to a thread when it
+communicates with another thread, giving it information about how communication
+occurred.  Programmer-defined {\em trap handlers} can implement arbitrary
+analysis using that information. By default, \ctraps has low overheads that are
+appropriate production in many cases.  As we show in our evaluation, the
+overhead of \ctraps applications scales with the complexity of their analysis.
+Figure~\ref{fig:overview} illustrates the relationship between last writer
+slices, \ctraps, and \ctraps applications.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=.70\columnwidth]{figs/overview.pdf}
+\Caption{\label{fig:overview}{\bf An overview of last writer slicing and CTraps.} Last writer slicing is a basic mechanism for tracking provenance.  The CTraps framework uses last writer slicing to identify communication and expose it to CTraps applications.  CTraps applications implement arbitrary dynamic concurrency analyses, like communication graph collection~\cite{recon} or cooperative debugging~\cite{cci}.}
+\end{figure}
+
 
 
 
@@ -283,7 +290,7 @@ prior efforts, we focus on using provenance analysis for
 \begin{figure}[h]
 \centering
 \includegraphics[width=\columnwidth]{figs/JDKStringBufferFail.pdf}
-\caption{\label{fig:coreDumpFail}{\bf Atomicity violation bug in a string buffer implementation.} The core dump does not reveal the connection between {\tt append()} and {\tt erase()}, which is crucial to understand the bug.}
+\Caption{\label{fig:coreDumpFail}{\bf Atomicity violation bug in a string buffer implementation.} The core dump does not reveal the connection between {\tt append()} and {\tt erase()}, which is crucial to understand the bug.}
 \end{figure}
 
 Figure~\ref{fig:coreDumpFail} illustrates the role of provenance information in
@@ -410,7 +417,7 @@ shown). That information helps understand {\em why} {\tt Y} holds its value.
 \begin{figure}[h]
 \centering
 \includegraphics[scale=.6]{figs/BasicLWT.pdf}
-\caption{\label{fig:basicLWT}Basic operation of the last writer table. Different shapes signify different distinct memory operations. }
+\Caption{\label{fig:basicLWT}Basic operation of the last writer table. Different shapes signify different distinct memory operations. }
 \end{figure}
 
 
@@ -451,7 +458,7 @@ bug's cause.
 \begin{figure}[h]
 \centering
 \includegraphics[width=\columnwidth]{figs/JDKStringBufferDebug2.pdf}
-\caption{\label{fig:jdklws}{\bf Using last writer slices to debug an
+\Caption{\label{fig:jdklws}{\bf Using last writer slices to debug an
 ordering violation in the JDK 1.4 StringBuffer library.} The last writer slice reveals the buggy interaction between {\tt erase()} and {\tt append()}.}
 \end{figure}
 
@@ -483,7 +490,7 @@ during debugging, like the core dump.
 \begin{figure}[h]
 \centering
 \includegraphics[width=.9\columnwidth]{figs/LWS_Overview.pdf}
-\caption{\label{fig:lwsoverview}{\bf Overview of system support for last writer slicing.} Our compiler and runtime library ensure the \lwt remains updated so it can be used during debugging.}
+\Caption{\label{fig:lwsoverview}{\bf Overview of system support for last writer slicing.} Our compiler and runtime library ensure the \lwt remains updated so it can be used during debugging.}
 \end{figure}
 
 The \lwt implemented in the runtime library is a {\em shadow memory} that holds
@@ -607,14 +614,14 @@ which is uncommon, {\em and} an unserializable interleaving of accesses and
 
 \paragraph{Non-overlapping Memory References} 
 We assume written memory locations do not overlap in memory because our \lwt
-design is {\em granularity oblivious}.  We discuss this issue informally due to
-space constraints.  Each \lwt entry corresponds to a location that was written.
-Two instructions might reference different locations that overlap because the
-referenced locations have different granularities ({\em e.g.}, accessing a byte
-that is part of a previously accessed word).  When that happens, both accesses
-update different \lwt entries, because they reference different locations.
-However, the overlapping region then has two different entries reflecting the
-last {\em two} updates to its parts rather than just its last write.
+design is {\em granularity oblivious}.  Each \lwt entry corresponds to a
+location that was written.  Two instructions might reference different
+locations that overlap because the referenced locations have different
+granularities ({\em e.g.}, accessing a byte that is part of a previously
+accessed word).  When that happens, both accesses update different \lwt
+entries, because they reference different locations.  However, the overlapping
+region then has two different entries reflecting the last {\em two} updates to
+its parts rather than just its last write.
 
 The \lwt remains correct, assuming the program only accesses non-overlapping
 regions.  In programs that access overlapping regions, there is always some
@@ -664,7 +671,7 @@ Together, the \ctraps executable and the \ctraps handlers are deployed.
 \begin{figure}[htb]
 \centering
 \includegraphics[width=.90\columnwidth]{figs/CTraps_Overview.pdf}
-\caption{\label{fig:systemdiagram}{\bf CTraps system support.}}
+\Caption{\label{fig:systemdiagram}{\bf CTraps system support.}}
 \end{figure}
 
 
@@ -683,7 +690,7 @@ execution.  \ctraps implements traps using a combination of compiler and
 runtime library support.   
 
 \paragraph{Compiler Support}
-Our compiler inserts a call to the \ctraps~{\em trap hook} function immediately
+Our compiler inserts a call to the CTraps {\em trap hook} function immediately
 before all read and write operations that access potentially escaping memory
 locations.  Trap hooks are passed the address of the memory location being
 accessed, the thread identifier of the accessing thread, the type of operation
@@ -713,7 +720,7 @@ identifier of the last write to the involved location.
 %          ThdId currThd, ProgPt currPt,
 %          ThdId lastThd, ProgPt lastPt);
 %\end{verbatim}
-%\caption{\label{fig:hookapi}The \ctraps trap handling interface.}
+%\Caption{\label{fig:hookapi}The \ctraps trap handling interface.}
 %\end{figure}
 
 
@@ -894,7 +901,7 @@ mysql  &  4.0.12 &  791     & Atom.  &Yes  &No    &Yes   & No  \\%All values usa
 apache1&  2.0.48 &  21285   & Atom.  &Yes  &No    &Yes   & Some \\%All values usable
 apache2&  2.2.9 &  45605    & Atom.  &Yes  &No    &Some  & No \\%All values usable
 \end{tabular}
-\caption{\label{tab:bugs}{\bf Concurrency debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
+\Caption{\label{tab:bugs}{\bf Concurrency debugging with last writer slices.} We describe each bug and summarize the debugging benefit of last writer slices using the evaluation criteria from ~\cite{badapples}.  }
 \normalsize
 \end{table}
 
@@ -985,7 +992,7 @@ last writer slices in debugging an ordering violation in the JDK-1.4.
 \paragraph{httrack}
 Figure~\ref{fig:httlws} shows how last writer slices help understand the root
 cause of a concurrency bug from HTTrack-3.43.9.  The program crashes at point
-{\bf B} when it calls {\tt hts\_mutex\_lock()} with an invalid mutex.    The
+{\bf B} when it calls {\tt hts\_} {\tt mutex\_lock()} with an invalid mutex.    The
 root cause of this bug is that Thread 1 fails to initialize the mutex before
 Thread 2 uses it.   The core dump is of little debugging use, only showing
 that, indeed, the lock is uninitialized.  Even if the programmer compared the
@@ -996,7 +1003,7 @@ execution, the lock contains valid mutex state.
 \begin{figure}[h]
 \centering
 \includegraphics[width=\columnwidth]{figs/LWSHTTDebug.pdf}
-\caption{\label{fig:httlws}{\bf Using last writer slices to debug an
+\Caption{\label{fig:httlws}{\bf Using last writer slices to debug an
 ordering violation in HTTrack.} The provenance information stored in the last
 writer slice for the mutex variable helps understand the bug's root cause.}
 \end{figure}
@@ -1061,7 +1068,7 @@ programmer might equivalently use a breakpoint, rather than adding an
 \begin{figure}[h]
 \centering
 \includegraphics[width=\columnwidth]{figs/MySQLDebug.pdf}
-\caption{\label{fig:mysqllws}{\bf Using last writer slices to debug an
+\Caption{\label{fig:mysqllws}{\bf Using last writer slices to debug an
 atomicity violation in MySQL 4.0.12.} The last writer slice reveals the code that closes the log before a database insertion that goes unlogged, which is a security problem.}
 \end{figure}
 
@@ -1132,7 +1139,7 @@ threads, measuring Apache's performance to be the throughput reported by {\tt
 ApacheBench}.  
 
 \paragraph{LevelDB-1.5.0}
-LevelDB is a carefully tuned high-performance key-value store written by Google
+LevelDB is a high-performance key-value store written by Google
 developers. To benchmark LevelDB, we used the included {\tt db\_bench} utility,
 running its ``Read while Writing'' test with 8 threads.  We measure LevelDB's
 performance to be the operation throughput reported by {\tt db\_bench}.
@@ -1194,7 +1201,7 @@ PARSEC programs.
 \begin{figure}
 \centering
 \includegraphics[width=.9\columnwidth]{plots/perf.pdf}
-\caption{\label{fig:perfall}Runtime overhead of \ctraps and Last Writer Slices (LWS).}
+\Caption{\label{fig:perfall}Runtime overhead of \ctraps and Last Writer Slices (LWS).}
 \end{figure}
 
 \subsubsection{Overheads Due to Conservative Escape Analysis}
@@ -1362,7 +1369,7 @@ important target than PARSEC for these types of analyses in production.
 \begin{figure}
 \centering
 \includegraphics[width=.9\columnwidth]{plots/appperf.pdf}
-\caption{\label{fig:perfapps}Performance overheads of CCI-Prev and Graph Collection implemented with \ctraps.}
+\Caption{\label{fig:perfapps}Performance overheads of CCI-Prev and Graph Collection implemented with \ctraps.}
 \end{figure}
 
 
@@ -1403,7 +1410,7 @@ fluidanimate   &   19.6\%&(149)                   \\
 streamcluster  &   11.6\%&(47)                    \\
 swaptions      &   8.3\% &(19)                    \\
 \end{tabular}
-\caption{\label{tab:char}Instrumentation pruned by static analysis.}
+\Caption{\label{tab:char}Instrumentation pruned by static analysis.}
 \end{table}
 
 
