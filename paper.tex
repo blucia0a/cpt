@@ -28,7 +28,7 @@
 %\doublespacing
 \authorinfo{Anonymous for Submission}{}
 
-\title{Efficient Data Provenance Analysis for Concurrent Programs}
+\title{Data Provenance Tracking for Concurrent Programs}
 
 %\authorinfo{Brandon Lucia \and Luis Ceze}{University of Washington, Department of Computer Science and Engineering}{\{blucia0a,luisceze\}@cs.washington.edu\\http://sampa.cs.washington.edu\\{\bf In Submission --- Please Do Not Distribute}}
 
@@ -41,26 +41,12 @@
 %improves debugging information and provides information to dynamic analyses and
 %runtime systems.  Prior work that continuously monitors cross-thread
 %dependences typically has overheads too high for production.  
-We propose {\em last writer slices}, an analysis for shared-memory
-multi-threaded programs that tracks {\em data provenance information} in
-production code.  Last writer slices dynamically record the thread and
-operation that last wrote each variable, reflecting the {\em provenance} of
-values.  Provenance helps understand bugs and we provide last writer slices to
-programmers during debugging.  We build {\em communication traps}
-(\ctraps) using last writer slices.  \ctraps efficiently
-monitors and can interpose on operations that share data between
-threads.  \ctraps is extensible, exposing inter-thread dependences
-to {\em \ctraps applications} that implement arbitrary analyses.  
-
-We implement last writer slicing and \ctraps.  We conduct debugging studies of
-real, buggy programs showing last writer slices are useful for debugging.  We
-show \ctraps is useful by implementing two concurrency analyses from prior
-work.  We evaluate the performance of our designs using server programs
-and standard benchmarks.  We show that collecting last writer slices
-has low run time overheads (0--15\%) for many applications,including  
-memcached, LevelDB, MySQL, and Apache.  We show that \ctraps imposes low 
-overheads by default and that overheads scale with analysis complexity.
-
+We propose {\em last writer slicing}, a mechanism for tracking {\em data provenance information} in multithreaded code in a production setting.
+Last writer slices dynamically track provenance of values by recording the thread and operation that last wrote each variable. We show that this information complements core dumps and greatly improves debugability. We also propose {\em communication traps}
+(\ctraps), an extensible framework that uses last writer slices to interpose on operations that lead to inter-thread communication. We show how to use 
+\ctraps implement multiple dynamic analysis tools for mulithreaded programs. Our evaluation on server programs and PARSEC benchmarks shows that last writer slices has low run time overheads (0--15\%) for many applications,including  
+memcached, LevelDB, MySQL, and Apache. Our debugging case studies of
+real, buggy programs shows that last writer slices are indeed useful for debugging.  
 \end{abstract}
 
 \section{Introduction}
