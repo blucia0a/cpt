@@ -1,4 +1,4 @@
-\documentclass[preprint,9pt]{sigplanconf}
+\documentclass[preprint,10pt]{sigplanconf}
 \usepackage{url}
 \usepackage{listings}
 \usepackage{subfigure}
@@ -23,7 +23,7 @@
 \newcommand{\lwt}{LWT\xspace}
 
 
-\newcommand{\Caption}[1]{\begin{minipage}{1.0\columnwidth} \caption{#1} \end{minipage}\vspace{-2ex}}
+\newcommand{\Caption}[1]{\begin{minipage}{1.0\columnwidth} \caption{#1} \end{minipage}}
 \newcommand{\CaptionWide}[1]{\caption{#1}\vspace{-2ex}}
 %\doublespacing
 \authorinfo{Anonymous for Submission}{}
@@ -64,14 +64,30 @@ overheads by default and that overheads scale with analysis complexity.
 \end{abstract}
 
 \section{Introduction}
-Multi-threaded programming is challenging.  In contrast to 
-sequential reasoning, multi-threaded programs require complex reasoning about
-many threads of control and their interactions.  In shared memory programs,
-threads interact by reading and writing memory locations.  Threads' reads and
-writes interleave arbitrarily and nondeterministically and each interleaving
-can yield different behavior.  Reasoning about thread interactions is a central
-challenge to building multi-threaded software because some thread interactions
-have undesirable consequences, like crashing or degrading performance.
+Multi-threaded programming is challenging.  In contrast to sequential
+reasoning, multi-threaded programs require complex reasoning about many threads
+of control and their interactions.  In shared memory programs, threads interact
+by reading and writing memory locations.  Threads' reads and writes interleave
+arbitrarily and nondeterministically. Each interleaving can lead to different
+behaviors and memory states, some of which may be undesirable, like crashes or
+data corruption.  Moreover, because complete concurrency testing is infeasiable
+in general, undesirable interleavings can evade testing and lead to production
+failures.
+
+The problem we are addressing in this work is that debugging support for
+understanding thread interactions is inadequate.  Today, programmers use a
+debugger to examine memory contents either during a debugging execution or by
+loading a core dump from a failed execution.  Examining the contents of memory
+reveals {\em what} the state of the program is ({\em e.g.}, the values of
+variables).  Unfortunately, the real question programmers must answer is {\em
+why} the state of the program is what it is.  Understanding why a program
+entered an undesirable state ({\em e.g.}, crashed) is the key to changing the
+code to prevent future executions from entering that state.  Multi-threading
+makes this understanding elusive because implicating particular operations in
+particular threads for a failure is a complex task.  Aiding developers in this
+understanding for failed production executions is important because
+hard-to-find bugs may manifest in production only.
+
 
 %A common approach to this challenge is to reason about dependent memory
 %operations.  Memory operations are dependent if their order determines the
@@ -79,73 +95,35 @@ have undesirable consequences, like crashing or degrading performance.
 %especially clear by its prevalent use during manual program debugging and in
 %support of program analysis tools.
 
-A value's provenance is a description of the reason that it is stored in a
-variable. Provenance information helps answer the question: "Why does this
-variable contain this value?", which is central to debugging. Debugging a
-concurrent program requires understanding how threads interact, and because  
-communication happens via reads and writes to shared variables, {\em data
-provenance information is essential}. Provenance can take on many forms, for
-example, a value's provenance could be the instruction that wrote it, the
-function that returned it, and in the context of concurrent programs, the
-thread that produced it.
+Our approach to solving that problem is to provide the programmer with {\em
+provenance} information that can be examined alongside the program's memory
+state ({\em i.e.}, core dump).  A value's provenance describes why a memory
+location contains its value.  In this work we develop a new provenance tracking
+mechanism called {\em last writer slicing} that satisfies these goals.  A
+memory location's last writer slice is a record containing the program point
+and the identifier of the thread that last wrote data to that memory location.
+As the program executes in production, we collect last writer slices for each
+potentially shared memory location and those last writer slices record the
+provenance of the values stored in those locations.  Last writer slices are
+saved with a core dump when the program fails and are available in the debugger
+({\em e.g.}, for breakpoint debugging).
+
+We have three goals for last writer slicing:  (1) To collect a general form of
+provenance information, not limited to certain values or locations only. (2) To
+provide provenance information focused on how threads interact to aid in
+understanding concurrency bugs. (3) To engineer our system to have overheads
+low enough for use in production, aiming for a 10 -- 50\% maximum overhead. 
+
+
 
 %During debugging provenance helps a programmer better understand not just where failures occur, but where values came from, connectng disparate
 %parts of a program that interact, leading to a failure.
-
-Efficiently collecting debugging information, like data provenance, from production
-systems is particularly important for concurrent software since bugs
-manifest as failures rarely. When a production system fails and a programmer
-receives a bug report, reproducing the reported failure to collect provenance
-information may be difficult or impossible. It is essential to collect as much
-information as performance margins permit from production, to reduce the need
-for time-consuming failure reproduction.
-
-Prior work has previously shown that some limited forms of provenance help
-with debugging~\cite{badapples, whylineicse, tipslicingsurvey}. One effort
-tracked code that wrote unusable values into variables~\cite{badapples}. That
-work showed that revealing the connection between an unusable value's origin
-and a failure it causes is helpful during debugging. Other work showed that
-programmers debug more effectively when they can ask ``why'' questions about
-values during debugging~\cite{tipslicingsurvey,whylineicse}. 
-
-These efforts have shown some of the promise of provenance, but are not a
-debugging panacea and are insufficient for dealing with concurrent program
-bugs. First, prior work~\cite{badapples} has focused on providing provenance
-information for only some unusable {\em values}, like {\tt NULL}, which limits its applicability. 
-% Limiting the applicability of their technique to only some failures, like {\tt
-% Null Pointer Exceptions}.
-Second, while prior work has shown that limited provenance tracking for Java
-programs is possible with overheads low enough for production~\cite{badapples},
-a more general form of provenance tracking for C and C++ programs has been
-elusive. Prior approaches that build on slicing~\cite{thinslicing,
-tipslicingsurvey, whylineicse} or heavy-weight memory checkers~\cite{badapples}
-impose overheads too high for production for C and C++ programs. Third, no
-prior technique that we know of has collected provenance information that is
-tailored to debugging concurrent programs with overheads that are low enough
-for use in production systems. Addressing concurrency is important because a
-value could have originated in any of a large number of threads, making
-reasoning about why a variable contains that value complex and difficult. 
 
 %In
 %summary, the challenges in using provenance to debug concurrent programs are:
 %(1) collecting the right information to characterize the concurrent execution
 %behavior; and (2) making it efficient enough for general programs running in
 %production settings. 
-
-In this work we address the challenges above and develop a novel form of
-in-production provenance tracking for concurrent programs. We have three goals.
-(1) To collect a general form of provenance information, not limited to only
-certain values. (2) To provide provenance information that helps understand how
-threads interact, which is the key to understanding concurrency bugs. (3) To
-work with overheads low enough for use in production (ideally, less than 10\%),
-especially for long-running server programs that experience a diversity of production behavior.
-
-We develop a new provenance tracking mechanism called {\em last writer
-slicing} that satisfies these goals.   As the program executes in production,
-last writer slicing tracks the thread and program point that last wrote any
-value to each potentially shared memory location --- its provenance.  Last
-writer slices are saved with a core dump when the program fails and are
-available in the debugger ({\em e.g.}, for breakpoint debugging).
 
 Last writer slices are primarily useful for concurrency debugging, but we 
 observe that provenance information is a
@@ -159,23 +137,17 @@ understanding~\cite{oshatr}.
 
 Motivated by these prior {\em ad hoc} efforts, we build a general mechanism
 called {\em Communication Traps} or {\em \ctraps} on top of last writer slices
-(Section~\ref{sec:ctraps}). \ctraps can be used to implement several dynamic
-analysis tailored to concurrent programs, like the ones discussed above.
-\ctraps works by checking the last writer slice of each potentially shared
-memory location when a thread accesses such a location. If the accessing
-thread is different from the thread that last wrote the location, the access
-signifies {\em communication} between the threads. When communication occurs,
-\ctraps delivers a software {\em trap} to the accessing thread, giving it
-information about how communication occurred. The trap can be handled by an
-analysis-specific trap handler. Trap handlers implement {\em \ctraps
-applications} through an extensible interface that can interpose on the
-execution (Section~\ref{sec:apps}). By default, \ctraps has very low overheads
-and similarly to last writer slicing are appropriate for use in production in
-many cases. 
-%\ctraps applications can perform arbitrary concurrency analyses,
-%but at their own discretion and cost. 
-As we show in our evaluation, the
-overhead of \ctraps applications scales with the complexity of their analysis.
+(Section~\ref{sec:ctraps}). \ctraps is useful for implementing dynamic
+concurrency analyses, like the ones discussed above.  \ctraps runs alongside a
+program and uses last writer slices to identify memory accesses that lead to
+{\em communication} between the threads. Communcation occurs when a thread
+accesses memory last written by a different thread and \ctraps delivers a {\em
+trap} to a thread when it communicates with another thread, giving it
+information about how communication occurred.  Programmer-defined {\em trap
+handlers} can implement arbitrary analysis using that information. By default,
+\ctraps has low overheads that are appropriate production in many cases.  As we
+show in our evaluation, the overhead of \ctraps applications scales with the
+complexity of their analysis.
 
 
 
@@ -310,15 +282,17 @@ sophisticated concurrency analyses that rely on last writer information.
 
 \subsection{Debugging and Data Provenance}
 
-Data provenance information is directly useful during program debugging.  Prior
-work~\cite{whylinechi,whylineicse} showed that when programmers debug
+Prior work shows that some forms of data provenance information is directly
+useful during program debugging.  The WhyLine
+Debugger~\cite{whylinechi,whylineicse} showed that when programmers debug
 programs, they benefit from the ability to directly ask such provenance
-(``why'') questions of their debugger.  Origin tracking~\cite{badapples} and
-program slicing~\cite{tipslicingsurvey} also make debugging easier by reporting
-the provenance of values.  Like these prior efforts, in this work we focus on
-using data provenance information for {\em debugging} -- understanding the root
-cause of a failure -- as opposed to {\em bug detection} -- finding new, unknown
-bugs.
+(``why'') questions of their debugger.  Bad Value Origin
+Tracking~\cite{badapples} is a limited form of provenance analysis that tracks
+intructions that stored certain unusable values.  The authors of Bad Value Origin Tracking showed that even such limited provenance information
+helps understand some bug root causes. Like these
+prior efforts, we focus on using provenance analysis for
+{\em debugging} -- understanding the root cause of a failure -- as opposed to
+{\em bug detection} -- finding new, unknown bugs.
 
 \begin{figure}[h]
 \centering
@@ -1449,35 +1423,48 @@ swaptions      &   8.3\% &(19)                    \\
 
 \section{Related Work}
 
+
 \paragraph{Debugging with Data Provenance Information}
-Prior work has looked at various forms of data provenance for debugging.
+Prior work has shown that some limited forms of provenance help
+with debugging~\cite{badapples, whylineicse, tipslicingsurvey}. 
 
-We have discussed bad value origin tracking~\cite{badapples} throughout this
-work and compared directly with that technique in our evaluation.  Bad value
-origin tracking is like our work because they store provenance information to
-be used for debugging -- a similar goal to ours.  Bad value origin tracking
-differs from our work in several ways.  First, their technique only tracks the
-provenance of {\em unusable} values -- a fraction of all values in an
-execution.  Our work, instead, tracks provenance for any value stored in a
-potentially shared memory location, which includes a broader set of provenance
-and targets our technique to concurrency debugging.  Second, their technique
-does not run with overheads tolerable for performance for C and C++ programs.
-They implement their technique for C and C++ programs using Valgrind MemCheck,
-which has high runtime overheads.  Our technique has overheads low enough for
-production in many cases, especially in server applications.  Third, their
-technique does not explicity record thread information with tracked origins.
-Our work focuses on concurrency and we include thread information.  As we show
-in Section~\ref{sec:eval:debugging} thread information is important for
-understanding some bugs.  Fourth, their technique uses bad value piggy-backing
-to store origins, we use a shadow memory.
 
-Like our work, the WhyLine debugger~\cite{whylineicse, whylinechi} allows
-programmers to ask questions about why variables hold particular values during
-debugging.  WhyLine answers by presenting data- and control-flows that
-influenced those variables.  WhyLine differs from our work in that it uses
-dependence slicing on recorded executions to answer provenance questions and
-has overheads too high for production use.  WhyLine also did not explicitly
-focus on concurrency.
+
+Bad Value Origin Tracking~\cite{badapples} tracked code that wrote unusable
+values into variables~\cite{badapples}. That work showed that revealing the
+connection between an unusable value's origin and a failure it causes is
+helpful during debugging.  Bad value origin tracking is the closest prior work
+to this work~\cite{badapples} and we directly compare to it in our evaluation.
+At a high level, bad value origin tracking is like our work because they track
+provenance information for debugging, which is a similar goal to ours.  
+
+Bad value origin tracking relates to our work in several other ways.  First,
+their technique tracks the provenance of {\em unusable} values only -- a
+fraction of all values in an execution.  Our work, instead, tracks provenance
+for any value stored in a potentially shared memory location, which includes a
+broader set of provenance and targets our technique to concurrency debugging.
+Second, for Java programs, bad value origin tracking has runtime overheads
+acceptable for production, which was a goal for our system.  Bad value origin
+tracking ``piggybacks'' provenance information on storage allocated by the Java
+runtime for bad values.  Piggybacking is a key to their low overheads.  For
+C/C++, the overhead of bad value origin tracking is much higher.  In C/C++,
+they cannot use piggybacking and, instead, use heavy-weight binary
+instrumentation with overheads unacceptable for production.  Our technique has
+overheads low enough for production for C/C++ programs, especially for server
+applications.  Third, their technique does not explicity record thread
+information with tracked origins.  Our work focuses on concurrency and we
+include thread information.  As we show in Section~\ref{sec:eval:debugging}
+thread information is important for some bugs.  
+
+Other work showed that programmers debug more effectively when they can ask
+``why'' questions about values during
+debugging~\cite{tipslicingsurvey,whylineicse}.  Like our work, the WhyLine
+debugger~\cite{whylineicse, whylinechi} allows programmers to ask questions
+about why variables hold particular values during debugging.  WhyLine answers
+by presenting data- and control-flows that influenced those variables.  WhyLine
+differs from our work in that it uses slicing on recorded executions to answer
+provenance questions, it has high run time overheads, and does not focus on
+concurrency.
 
 
 \paragraph{Program Slicing}
@@ -1497,9 +1484,18 @@ overheads too high for production and focused on minimizing the size of each
 slice compared to prior slicing techniques. 
 
 
-\paragraph{Communication Tracking in Concurrent Programs}
-Several techniques have been proposed do some form of dependence and
-communication tracking to analyze concurrent programs.  
+\paragraph{Communication and Sharing Analyses in Concurrent Programs}
+Several techniques have been proposed analyze dependences and
+communication in concurrent programs.  
+
+A closely related recent effort in this space is Octet~\cite{octet} that
+captures inter-thread communication soundly and, like \ctraps, can be used to
+build dynamic concurrency analyses.  Octet differs from \ctraps in that it is
+sound and was built to support analyses on Java programs.  Additionally, Octet
+tracks the ``locality state'' of memory locations, rather than the last writer
+slice information.  Octet's average run time overhead (26\%) is comparable to
+the overhead of both last writer slicing and \ctraps and all three techniques
+have low enough overheads in many cases for production use.
 
 CCI~\cite{cci}, Bugaboo~\cite{bugaboo}, LBA~\cite{paralog}, Recon~\cite{recon},
 and DefUse~\cite{defuse} all explicitly track some thread interactions.  Unlike
