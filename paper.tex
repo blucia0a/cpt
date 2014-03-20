@@ -52,10 +52,15 @@ monitors and can interpose on operations that share data between
 threads.  \ctraps is extensible, exposing inter-thread dependences
 to {\em \ctraps applications} that implement arbitrary analyses.  
 
+In our evaluation, we show how last writer slicing
+
+ and \ctraps are used to 
+efficiently two concurrency analyses from prior work. 
+
+
 We implement last writer slicing and \ctraps.  We conduct debugging studies of
 real, buggy programs showing last writer slices are useful for debugging.  We
-show \ctraps is useful by implementing two concurrency analyses from prior
-work.  We evaluate the performance of our designs using server programs
+show \ctraps is useful by implementing .  We evaluate the performance of our designs using server programs
 and standard benchmarks.  We show that collecting last writer slices
 has low run time overheads (0--15\%) for many applications,including  
 memcached, LevelDB, MySQL, and Apache.  We show that \ctraps imposes low 
