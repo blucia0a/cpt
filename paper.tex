@@ -1,19 +1,43 @@
-\documentclass[preprint,10pt]{sigplanconf}
-\usepackage{url}
+\newcount\draft\draft=1 % set to 0 for submission or publication
+\newcount\cameraready\cameraready=0
+
+\documentclass[pageno,nohyperref]{jpaper}
+
+\ifnum\draft=1
+  \input{revision}
+  \usepackage{drafthead}
+\fi
+\usepackage{xxx}
+
+\usepackage{graphicx}
+\DeclareGraphicsExtensions{.pdf,.jpg,.png}
+\graphicspath{{./figs/} {./plots/}}
+
+\usepackage[normalem]{ulem}
+
 \usepackage{listings}
-\usepackage{subfigure}
-\usepackage{times}
-\usepackage{multirow}
-\usepackage{color}
-\usepackage{multicol}
+\lstset{
+    language=C,
+    emphstyle=\bfseries,
+    basicstyle=\ttfamily\small,
+    aboveskip=1mm plus 1mm minus 1mm,
+    belowskip=1mm plus 1mm minus 1mm,
+    mathescape=true,
+    xleftmargin=\parindent,
+}
+\newcommand{\lil}{\lstinline}
+
+\usepackage[labelfont=bf,font=small]{caption}
+
 \usepackage{amsmath}
 \usepackage{amssymb}
-\usepackage{setspace}
-\usepackage{graphicx}
-\usepackage{xspace}
+\usepackage{mathptmx}
+\usepackage{multirow}
+%\usepackage{multicol}
 \usepackage{color}
 \usepackage{rotating}
 
+\usepackage{xspace}
 \newcommand{\addtodo}[1]{\textcolor{red}{[To do: #1]}}
 \newcommand{\ctrap}{CTrap\xspace}
 \newcommand{\ctraps}{CTraps\xspace}
@@ -22,20 +46,30 @@
 \newcommand{\lws}{CTraps-LWS\xspace}
 \newcommand{\lwt}{LWT\xspace}
 
-
 \newcommand{\Caption}[1]{\begin{minipage}{.95\columnwidth} \caption{#1} \end{minipage} \vspace{-1.2ex}}
 \newcommand{\CaptionWide}[1]{\caption{#1}\vspace{-2ex}}
 %\doublespacing
-\authorinfo{Anonymous for Submission}{}
+%\authorinfo{Anonymous for Submission}{}
 
-\title{Data Provenance Tracking for Concurrent Programs}
 
 %\authorinfo{Brandon Lucia \and Luis Ceze}{University of Washington, Department of Computer Science and Engineering}{\{blucia0a,luisceze\}@cs.washington.edu\\http://sampa.cs.washington.edu\\{\bf In Submission --- Please Do Not Distribute}}
 
 %\author{Anonymous for Submission}
+
+\title{Data Provenance Tracking for Concurrent Programs}
+\newcommand{\submissionnumber}{65}
+\date{}
+
+
 \begin{document}
+
+\special{papersize=8.5in,11in}
+\setlength{\pdfpageheight}{\paperheight}
+\setlength{\pdfpagewidth}{\paperwidth}
+
 \maketitle
 
+\thispagestyle{empty}
 \begin{abstract}
 %Monitoring inter-thread memory dependences in production is useful.  Doing so
 %improves debugging information and provides information to dynamic analyses and
