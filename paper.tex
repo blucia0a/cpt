@@ -1,4 +1,4 @@
-\newcount\draft\draft=1 % set to 0 for submission or publication
+\newcount\draft\draft=0 % set to 0 for submission or publication
 \newcount\cameraready\cameraready=0
 
 \documentclass[pageno,nohyperref]{jpaper}
@@ -1458,16 +1458,33 @@ slice compared to prior slicing techniques.
 
 
 \paragraph{Communication and Sharing Analyses}
-Several techniques have been proposed analyze dependences and communication in
-concurrent programs.  A closely related recent effort on dynamic dependence
-analysis is Octet~\cite{octet}, which captures inter-thread communication
-soundly and to aid in building arbitrary concurrency analyses. Octet tracks the
-``locality state'' of memory locations to make dependence tracking efficient.
-Octet differs from \ctraps in that it focuses on soundness, was built primarily
-to optimize dependence tracking, and does not discuss direct use of dependence
-information to help with debugging.  Octet's average run time overhead (26\%)
-is comparable to the overhead of both \lws and \ctraps and Octet, \lws, and
-\ctraps all have low enough overheads for production use in many cases.
+Several techniques have been proposed analyze communication in concurrent
+programs and are especially related to \ctraps.  
+
+A closely related recent effort on dynamic dependence analysis is
+Octet~\cite{octet}, which exposes inter-thread communication soundly to
+concurrency analyses.   Octet reports an average run time overhead of 26\%,
+which is comparable to the overhead of \lws and \ctraps.  
+
+To acheive these low performance overheads, Octet makes fundamental assumptions
+about its target system that \lws and \ctraps do not make.  To track
+communication, a thread in Octet must stop at ``safe points'' in an execution.
+At a safe point, the thread executes extra code to check a message queue that
+reports communication with other threads.  Octet assumes safe points at loop
+back edges, method entries, and blocking function calls.  This assumption is
+reasonable for Java, as many Java VMs use safe points to implement GC.  Octet
+uses existing safe points and their performance baseline assumes a VM with
+existing instrumentation at such safe points.  In contrast, C/C++ programs do
+not have a VM or existing safe points.   Checking a queue on every function
+call and method entry is likely to impose a higher performance penalty than
+Octet saw in Java.  \lws keeps overheads practical by relying on program
+synchronization to keep dependence information consistent --- unlike Octet
+which is always sound, Data-races may leave \lws data inconsistent.  However,
+\lws need not pay the cost of safe points and message queue checks.
+
+Another important difference between Octet and this work is that this work
+illustrates the benefit of directly using \lws's provenance information for
+debugging.   Octet does not explore provenance debugging.
 
 CCI~\cite{cci}, Bugaboo~\cite{bugaboo}, LBA~\cite{paralog}, Recon~\cite{recon},
 and DefUse~\cite{defuse} all explicitly track some thread interactions.  Unlike
