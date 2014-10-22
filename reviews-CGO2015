@@ -1,0 +1,225 @@
+==========================================================================
+                            CGO2015 Review #65A
+                     Updated 15 Oct 2014 5:46:22pm EDT
+---------------------------------------------------------------------------
+        Paper #65: Data Provenance Tracking for Concurrent Programs
+---------------------------------------------------------------------------
+
+                      Overall Merit: 5. Accept
+                 Reviewer Expertise: 4. Expert
+                            Novelty: 3. Incremental improvement
+                    Writing Quality: 4. Excellent
+
+                         ===== Paper Summary =====
+
+The paper presents a system that stores the thread and program point that
+last wrote each thread-shared variable, called Last Writer Slicing (LWS).
+They identify (potentially) thread-shared variables via escape analysis.
+LWS is extended into a communication analysis framework by identifying and
+providing a control point at read-write pairs that cross threads.  The
+paper evaluates the use of these techniques for concurrency debugging and
+analysis.
+
+                        ===== Paper Strengths =====
+
+The paper is focused, to the point, and well-written.  The presentation is
+thorough both in its description of its main ideas and in its evaluation
+of their worth.
+
+                       ===== Paper Weaknesses =====
+
+The ideas are relatively simple (though that is not always a bad thing).
+The paper slightly over-claims its performance results, talking about LWS
+being fast enough for production deployment based primarily on its server
+benchmarks (which may not be CPU-bound) while its PARSEC results are
+significantly higher.
+
+                ===== Additional Comments for Authors =====
+
+The Last Writer Slicing seems useful for sequential bugs as well as
+concurrency bugs.  The overhead will be higher as all writes will be
+instrumented, but it still seems like a useful tool in that mode.
+
+Overall the writing was very good, but I did notice a few typos:
+P5: "communcating"
+P6: "make" should be "makes" in the final paragraph on the 1st column
+P8: "and a matching" should be "and matching"
+P10: "the a"
+
+                ===== Comments to Address in Rebuttal =====
+
+The paper states that there is currently no support for inline assembly.
+Yet it also says that several of the PARSEC benchmarks that were executed
+use hand-coded assembly.  How was the assembly handled?
+
+Is the described system implementation (64-bit entries holding a combined
+program point and thread identifier) and benchmark evaluation targeting
+64-bit or 32-bit applications?  I'm assuming 64-bit, given the 2GB LWT,
+with the program points encoded as library and offset or some other
+mechanism.
+
+What is used as the thread identifier and how is it obtained efficiently at
+runtime?
+
+To better interpret the overhead results on the server benchmarks, I would
+want to know whether the server applications on these workloads are
+CPU-bound or not.
+
+A compiler-based approach has the shortcomings of not instrumenting system
+libraries.  Could the LWS be misleading if it showed application code as
+being the last writer to a variable when in fact library code subsequently
+wrote to the variable?
+
+===========================================================================
+                            CGO2015 Review #65B
+                     Updated 17 Oct 2014 6:59:32am EDT
+---------------------------------------------------------------------------
+        Paper #65: Data Provenance Tracking for Concurrent Programs
+---------------------------------------------------------------------------
+
+                      Overall Merit: 5. Accept
+                 Reviewer Expertise: 4. Expert
+                            Novelty: 4. New contribution
+                    Writing Quality: 4. Excellent
+
+                         ===== Paper Summary =====
+
+This paper proposes a new mechanism called last writer slicing (LWS) for tracking data provenance in multithreaded code. In addition, they build a framework called CTraps that exposes LWS to dynamic analysis tools. The evaluation shows the effectiveness of LWS and CTraps, and their moderate runtime overhead.
+
+                        ===== Paper Strengths =====
+
+Lightweight dynamic instrumentation to collect useful debugging information for multithreaded programs. 
+
+Evaluation is relatively solid. Deep-diving into user cases helps to demonstrate the effectiveness of the tool.
+
+                       ===== Paper Weaknesses =====
+
+Accessing to LWT is still racy for data-race-free programs that use atomic loads and stores. Atomic loads and stores do not race with each other. However, accessing to LWT before atomic loads and stores is racy. 
+
+LWS can only provide the last writer instead of a more complete history. Therefore, it can hardly explain the root cause of a bug without manual inspection and help from other tools. 
+
+When an error occur, LWS can only tell you the last writer of the erroneous variable but not how the value written is computed. 
+
+Performance overhead is still too large for production use. 
+
+Using a lossy hash table can make the results imprecise.
+
+                ===== Additional Comments for Authors =====
+
+Nit: The outermost border of Figure 5 and Figure 6 are unnecessary.
+
+===========================================================================
+                            CGO2015 Review #65C
+                     Updated 17 Oct 2014 3:27:26pm EDT
+---------------------------------------------------------------------------
+        Paper #65: Data Provenance Tracking for Concurrent Programs
+---------------------------------------------------------------------------
+
+                      Overall Merit: 4. Weak accept
+                 Reviewer Expertise: 3. Knowledgeable
+                            Novelty: 3. Incremental improvement
+                    Writing Quality: 3. Fair
+
+                         ===== Paper Summary =====
+
+The paper describes a system to facilitate the debugging of parallel program by recording the thread and location that writes each shared memory location. The paper includes both qualitative and quantitative evaluation of the system.
+
+                        ===== Paper Strengths =====
+
+The strategy is simple and seems to be useful.
+
+                       ===== Paper Weaknesses =====
+
+The main weakness is that the idea is seems to be too simple and the paper does not explore alternative strategies.
+
+                ===== Additional Comments for Authors =====
+
+
+Overall the idea seems effective and it seems a very natural idea. One wonders why it has not been done before. It seems that the idea can be extended by keeping track of additional information in different ways, but the paper does not explore alternatives. In particular, it is conceivable that race detection strategies would detect the problem in all the examples used in the evaluation section. Also, perhaps keeping track of the last k > 1 writes perhaps would be useful and given the infrastructure, it would be easy to explore this alternative. 
+A few additional issues:
+1.	The description of CTraps seems superfluous for the purposes of the paper since the strategy is not used for any studies other than to evaluate its performance. This could be a paper that explores the amount of information that should be kept to help debugging without increasing (too much) the overhead. The space devoted to CTRaps could be sued for more discussion and more experiments.
+2.	I don’t know what lossy resolution for hash collisions is. Perhps is just me, but explaining what it is in a couple of lines could help.
+3.	Dependences are execution order constraints. They do not arise in parallel programs. Other terms could be used for write-write and read-write conflicts.
+4.	It is not clear how many times httrack and transmission had to be executed to get both good and bad behaviors. Would be nice to have this information.
+5.	It is not clear why 2GB are allocated to the shadow array.
+
+===========================================================================
+                            CGO2015 Review #65D
+                    Updated 17 Oct 2014 10:08:08pm EDT
+---------------------------------------------------------------------------
+        Paper #65: Data Provenance Tracking for Concurrent Programs
+---------------------------------------------------------------------------
+
+                      Overall Merit: 3. Weak reject
+                 Reviewer Expertise: 2. Some familiarity
+                            Novelty: 2. Done before (not necessarily
+                                        published)
+                    Writing Quality: 3. Fair
+
+                         ===== Paper Summary =====
+
+This paper presents LWS and CTraps, which are two dynamic analysis implementations that provide additional support for debugging concurrent programs. 
+
+LWS implements a dynamic analysis that records the last thread that wrote each shared memory location in the program. CTraps builds upon LWS by instrumenting each read access in the program to check the thread id of each shared memory location before reading the location’s value. If the thread id is different from the currently reading thread, then CTraps raises a trap that can be handled via trap handler interface.
+
+For the presented benchmarks, LWS and CTraps impose a geometric mean overhead of 10% and 14% for server applications, respectively, and 50% and 110% for the PARSC benchmarks, respectively.
+
+                        ===== Paper Strengths =====
+
+The paper is easy to follow and proposes a clean solution to a well-motivated problem.
+
+                       ===== Paper Weaknesses =====
+
+The intellectual content of this paper heavily overlaps with related work in the area, thereby suggesting that this neither a novel problem nor a novel solution because the related work (Octet) also potentially offers similar performance (in addition soundness in the presence of data races). 
+
+The paper’s contributions therefore heavily rely on the motivation that they’ve provided a separate, standalone implementation.
+
+                ===== Additional Comments for Authors =====
+
+At multiple points, the paper states that LWS overhead may be acceptable in production. This point doesn’t add much value to the paper and any reviewer could easily take issue with the claim (I’ve personally sat in industry meetings where a 5% overhead was unacceptable even though the technique would significantly enhance the security of the discussed system). In the interest improving the accessibility of the paper, I suggest removing this claim.
+
+The paper compares its performance to a baseline implementation of Octet. This evaluation could be improved by using the C++11 implementation of Octet: https://github.com/christopherastone/octet.
+
+                ===== Comments to Address in Rebuttal =====
+
+The paper suggests two reasons for the comparatively lower overhead of server applications versus the PARSEC benchmarks: independent parallelism/data and interference with heavily optimized code. However, one aspect that is not mentioned is I/O. Are the server applications substantially more I/O heavy than the parsec benchmarks, therefore obscuring compute overhead behind I/O latency?
+
+===========================================================================
+                            CGO2015 Review #65E
+                     Updated 18 Oct 2014 9:43:32am EDT
+---------------------------------------------------------------------------
+        Paper #65: Data Provenance Tracking for Concurrent Programs
+---------------------------------------------------------------------------
+
+                      Overall Merit: 5. Accept
+                 Reviewer Expertise: 1. No familiarity
+                            Novelty: 3. Incremental improvement
+                    Writing Quality: 4. Excellent
+
+                         ===== Paper Summary =====
+
+This paper makes three main contributions.  (1) It describes Last Writer
+Slicing (LWS), is a method of tracking the provenance of (bad) data values.
+(2) It describes CTraps, a framework for using LWSs to debug programs.  (3)
+It evaluates the effectiveness and performance overhead of LWS and CTraps.
+
+                        ===== Paper Strengths =====
+
+This well-written paper builds on a nice simple insight.  The evaluation
+is well-done with respect to performance, where the overheads are good,
+and the case studies for the efficacy evaluation were interesting.
+
+                       ===== Paper Weaknesses =====
+
+The demonstration of effectiveness is a bit less convincing, largely
+because the experiment is so subjective, but I'm not sure what else can
+be expected for a debugging experiment.
+
+The figures are too small to be readable.  If the authors are not able to
+buy extra space, then they would have to cut something if this paper were
+to be accepted.
+
+                ===== Additional Comments for Authors =====
+
+In the introduction, I think that you meant to spell out LWS instead of
+saying, "LWS (LWS)".
