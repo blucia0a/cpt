@@ -1,59 +1,95 @@
-Performance Issues> 
-Reviewer A: "over-claims its performance results, talking about LWS being fast enough for production"
-
-Reviewer D: Are overheads acceptable in production? Does claiming they are weaken the paper? 
-            "I've personally sat in industry meetings where a 5% overhead was unacceptable"
-
-Reviewer D:  Do the server applications hide instrumentation latency with I/O?
-
-
-Other Approaches and Information>
-Reviewer A: also useful for sequential bugs
-Reviewer B: LWS does not provide complete history variable, root cause info, or computation that produced value
-Reviewer C: Main Weakness - "the idea is too simple and the paper does not explore alternative strategies"
-            "one wonders why it has not been done before"
-            "can be extended by keeping track of additional information in different ways"
-            "conceivable that race detection ... would detect ... all examples in the evaluation" <<-- nope!  not all races!
-Reviewer C: Keeping the last K > 1 writes would be useful (see B above)
+>>>Overheads Low Enough for Production [Reviewers A & D]
+We appreciate the reviewers' suggestions that our overheads may be unacceptable
+in some production settings.   We do, however, consider our overheads
+appropriate for production in many cases: 3 of 4 servers and 4 of 9 PARSEC
+benchmarks have under 10% overhead -- arguably low enough for production.
+Achieving LWS overheads low enough for production was a focal design goal
+because, as Section 3.1 explains, some failures only happen in production.  We
+did not intend to convey that LWS is always appropriate for production --
+certainly not with the 3-4x overhead of vips and swaptions.  We will tone down
+the language surrounding our overheads for the final version.
 
 
-Comparison to Octet>
-Reviewer D: heavily overlaps with Octet
-            "Octet offers similar performance (in addition to soundness in the presence of data races)"
-Reviewer D: Compare to unpublished C++11 octet implementation
+>>>Other Approaches and Information [Reviewers A, B, & C]
+We were pleased to see the number of great suggestions to extend LWS!
+
+Reviewer A- We are very interested in the applicability of LWS to sequential
+bugs.
+
+Reviewers B & C- You correctly observe that LWS provides a limited form of
+history, even with the bounded context-sensitivity we mention in Section 6.4.
+Finding root causes, tracking the computation that produced a value, and
+tracking write histories all seem like very cool future directions for LWS!  
+
+Our goals in this work, articulated on page 1, are collecting provenance,
+focusing on concurrency, and being very lightweight. Omitting richer debugging
+information was a conscious design choice in LWS that yields a useful form of
+provenance, targets concurrency by tracking shared accesses, and is very
+lightweight compared to more sophisticated approaches.  Section 6.1.1 shows
+that even this simple form of provenance helps debug and Figure 9 supports the
+case that LWS is lightweight with data.
+
+Reviewer C- Race detection is, indeed, often helpful for diagnosing problematic
+thread interactions.  However, race detection is not always useful because not
+all concurrency bugs are races (e.g, two critical sections that should have
+been a single one).  LWS tracks provenance for racey and non-racey accesses.
+
+>>>Comparison to Octet [Reviewer D]
+We appreciate the connection of LWS to Octet, but, as we emphasize in Section 7
+"Communication and Sharing Analyses", our setting (C/C++), approach
+(lightweight, unsound with data-races), and purpose (provenance debugging) are
+considerably different.  Furthermore, Octet's performance figures are for its
+Java implementation in the Jikes RVM with existing safe points.  The data from
+our safe point study (in Section 7) suggest that adding the safe points Octet
+needs to C/C++ would increase its overheads.  We appreciate the pointer to the
+(unpublished?) C++11 implementation of Octet's barriers -- we are interested in
+comparing them to LWS.
 
 
-Value of CTraps>
-Reviewer C: "CTraps seems superfluous since strategy is not use for any studies other than to evaluate its performance"
+>>>Value of CTraps [Reviewer C]
+The focus of this work is certainly LWS and its provenance debugging value.  We
+do not, however, agree that CTraps is superfluous.  As Section 4.2 describes,
+LWS is the foundation of other useful analyses.  CTraps illustrates this fact,
+implementing two analyses from prior work (Section 4.2) with practical
+overheads (Figure 10).
 
 
-Library Code>
-Reviewer A: Is the LWS misleading if a library is the real last writer?
+>>>Library Code [Reviewer A]
+As with any compiler-based instrumentation strategy for C/C++, LWS
+does not instrument code in pre-compiled libraries.  Writes in such libraries
+are not tracked and may lead to imprecision.  We will add this point to the
+text in our final version.
 
 
-Implementation Questions>
-Reviewer A: how did you handle inline assembly?
-Reviewer A: 32- vs. 64-bit applications? How did you encode program points?
-Reviewer A: What is the thread identifier?  How obtained efficiently?
-Reviewer A: Were the server apps CPU-bound or not?
-Reviewer C: Why is the shadow array 2GB?
+>>>Implementation Questions
+Reviewer A- 
+Assembly: We did not instrument inline assembly and writes in such code did
+not update the LWT. 
+
+32-bit vs. 64 bit: we targeted 64-bit programs. The low 48 bits of program
+counter values encoded program points. At thread spawn, the runtime doles out
+unique 16-bit thread IDs that threads store thread-locally.  We pack these
+together to form an LWT entry.
+
+Reviewer C- The shadow array is 2GB to strike a balance between hash collisions
+(which occur with a smaller array) and the need to keep memory overheads
+reasonable.
 
 
-Lossy Hash Table>
-Reviewer B: Lossy hash table makes results imprecise
-Reviewer C: What is a lossy resolution for hash collisions?
+>>>Server Performance and I/O [Reviewers A & C]
+The servers were not always compute bound, but we ran them with
+realistic inputs. We used machine-local resources (databases, web content, etc)
+to control the latency hiding effect of I/O by avoiding the network. 
 
 
-Races in the LWT>
-Reviewer B: Concerned about racy LWT
+>>>Lossy Hash Table [Reviewers B & C]
+Our "lossy resolution policy" for hash collisions means a colliding bin write
+overwrites the existing bin contents.  Section 6.5 explains that such
+collisions are rare and we did not see the effect of any collisions in our
+experiments.
 
 
-Evaluation Questions>
-Reviewer C: how many executions to make httrack and transmission fail?
-Reviewer E: Debugging evaluation is subjective
-
-
-Other Issues>
-Reviewer C: "Dependences are order constraints. They do not arise in parallel programs". Use other terms for W-W and R-W conflicts
-Reviewer E: "method of tracking the provenance of (bad) data values"
-Reviewer E: figures are too small, must cut to be accepted
+>>>Races in the LWT
+We cut a full discussion of races in the LWT due to the page limit.  Section
+3.3 touches on this issue, emphasizing the most important point, which is that
+regions of code that are data-race free suffer no LWT corruption. 
