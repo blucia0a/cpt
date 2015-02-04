@@ -1,19 +1,29 @@
 \newcount\draft\draft=0 % set to 0 for submission or publication
-\newcount\cameraready\cameraready=0
+\newcount\cameraready\cameraready=1
 
-\documentclass[pageno,nohyperref]{jpaper}
+\documentclass[10pt,nocopyrightspace]{sigplanconf}
 
 \ifnum\draft=1
   \input{revision}
   \usepackage{drafthead}
 \fi
 \usepackage{xxx}
-
+\usepackage{url}
+\usepackage{flushend}
 \usepackage{graphicx}
 \DeclareGraphicsExtensions{.pdf,.jpg,.png}
 \graphicspath{{./figs/} {./plots/}}
 
 \usepackage[normalem]{ulem}
+\usepackage{fancyhdr}
+
+\let\OLDthebibliography\thebibliography
+\renewcommand\thebibliography[1]{
+  \OLDthebibliography{#1}
+  \setlength{\parskip}{0pt}
+  \setlength{\itemsep}{0pt plus 0.3ex}
+}
+
 
 \usepackage{listings}
 \lstset{
@@ -44,15 +54,19 @@
 \newcommand{\ctrapsfull}{CTraps-Full\xspace}
 \newcommand{\ctrapsmm}{CTraps-NRR\xspace}
 \newcommand{\lws}{LWS\xspace}
+\newcommand{\lwsfull}{Last Writer Slicing\xspace}
 \newcommand{\lwt}{LWT\xspace}
+\newcommand{\lwtfull}{Last Writer Table\xspace}
+
 
 \newcommand{\Caption}[1]{\begin{minipage}{.95\columnwidth} \caption{#1} \end{minipage} \vspace{-1.2ex}}
 \newcommand{\CaptionWide}[1]{\caption{#1}\vspace{-2ex}}
 %\doublespacing
-%\authorinfo{Anonymous for Submission}{}
+\authorinfo{Brandon Lucia}{Carnegie Mellon University, Department of Electrical and Computer Engineering}{blucia@ece.cmu.edu}
+\authorinfo{Luis Ceze}{University of Washington, Department of Computer Science and Engineering}{luisceze@cs.washington.edu}
 
 
-\author{Brandon Lucia\thanks{Work done in part as a PhD student at University of Washington.}\\Carnegie Mellon University\\{\em blucia@cmu.edu} \and Luis Ceze\\University of Washington\\{\em luisceze@cs.washington.edu}}
+%\author{Brandon Lucia\thanks{Work done in part as a PhD student at University of Washington.}\\Carnegie Mellon University\\{\em blucia@cmu.edu} \and Luis Ceze\\University of Washington\\{\em luisceze@cs.washington.edu}}
 
 %{blucia@cmu.edu luisceze@cs.washington.edu\\{\bf In Submission --- Please Do Not Distribute}}
 
@@ -65,19 +79,29 @@
 
 \begin{document}
 
+ \thispagestyle{fancy}
+  %For papers in which all authors are employed by the US government, un-comment the following
+  %\def\ieeenotice{U.S. Government work not protected by U.S. copyright}
+  %For papers in which all authors are employed by a Crown government (UK, Canada, and Australia), uncomment the following
+  %\def\ieeenotice{978-1-4799-8161-8/15/\$31.00 {\copyright}2015 Crown}
+  %For all other papers, uncomment the following:
+  \def\ieeenotice{978-1-4799-8161-8/15/\$31.00 {\copyright}2015 IEEE}
+  \def\confinfo{2015 IEEE/ACM International Symposium on Code Generation and Optimization}
+  \lfoot{\confinfo\\\ieeenotice} \cfoot{}
+  \renewcommand{\headrulewidth}{0pt}
+
 \special{papersize=8.5in,11in}
 \setlength{\pdfpageheight}{\paperheight}
 \setlength{\pdfpagewidth}{\paperwidth}
 
 \maketitle
 
-\thispagestyle{empty}
 \begin{abstract}
 %Monitoring inter-thread memory dependences in production is useful.  Doing so
 %improves debugging information and provides information to dynamic analyses and
 %runtime systems.  Prior work that continuously monitors cross-thread
 %dependences typically has overheads too high for production.  
-We propose {\em \lws} (\lws), a mechanism for tracking {\em data
+We propose {\em \lwsfull} (\lws), a mechanism for tracking {\em data
 provenance information} in multithreaded code in a production setting.  Last
 writer slices dynamically track provenance of values by recording the thread
 and operation that last wrote each variable. We show that this information
@@ -124,7 +148,7 @@ Our approach is to provide the programmer with data {\em provenance}
 information that can be examined alongside the program's memory state ({\em
 i.e.}, core dump).  Provenance information describes why a memory location
 contains its value.  In this work we develop a new provenance tracking
-mechanism called {\em \lws} (LWS).  A memory location's last writer slice is a
+mechanism called {\em \lwsfull} (\lws).  A memory location's last writer slice is a
 record containing the program point and the identifier of the thread that last
 wrote data to that memory location.  As the program executes in production, we
 collect last writer slices for each potentially shared memory location,
@@ -156,7 +180,7 @@ Programmer-defined {\em \ctraps Applications} can implement arbitrary analysis
 using that information. By default, \ctraps has low overheads, appropriate for
 production in many cases.  As our evaluation shows, the overhead of \ctraps
 applications scales with the complexity of their analysis.
-Figure~\ref{fig:overview} illustrates the relationship between last writer
+Figure~\ref{fig:overview} shows the relationship between last writer
 slices, \ctraps, and \ctraps applications.
 
 
@@ -236,28 +260,29 @@ slices, \ctraps, and \ctraps applications.
 
 \paragraph{Contributions of This Work}
 To summarize, this work makes several contributions:
-\begin{itemize}
 
-\item{{\bf Last writer slicing} ({\em LWS}): a provenance tracking mechanism
+\noindent {\bf Last writer slicing} ({\em LWS}): a provenance tracking mechanism
 useful for concurrency debugging.  We present an \lws implementation
-efficient enough for production use.}
+efficient enough for production use.
 
-\item{{\bf Communication traps} (\ctraps): an extensible
-framework for implementing concurrency analyses, built on \lws.  }
+\vspace{.5ex}
+\noindent {\bf Communication traps} (\ctraps): an extensible
+framework for implementing concurrency analyses, built on \lws.  
 
-\item{{\bf Efficacy evaluation}: We show that \lws is useful for debugging with
+\vspace{.5ex}
+\noindent {\bf Efficacy evaluation}: We show that \lws is useful for debugging with
 a study of several real concurrency bugs.  We show \ctraps is useful for
 building concurrency analyses by implementing two analyses from prior
-work~\cite{cci,defuse,recon}. }
+work~\cite{cci,defuse,recon}. 
 
-\item{{\bf Performance evaluation}: We show that in many cases our designs have
+\vspace{.5ex}
+\noindent {\bf Performance evaluation}: We show that in many cases our designs have
 overheads low enough for use in deployment (0--15\%) with a study of a diverse
 set of real programs ({\em e.g.}, MySQL, memcached and the PARSEC
-benchmarks~\cite{parsec}).  }
+benchmarks~\cite{parsec}). 
 
-\end{itemize}
 
-\begin{figure}[h]
+\begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figs/systemoverview.pdf}
 \Caption{\label{fig:overview}{\bf System Overview.} Last writer slicing tracks provenance, which augments the core dump and enables provenance debugging.  CTraps uses provenance to convey communication to CTraps applications, which implement concurrency analyses, like communication graphs~\cite{recon} or CBI~\cite{cci}.}
